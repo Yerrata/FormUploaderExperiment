@@ -28,6 +28,8 @@ def ready_case(store: CaseStore) -> str:
             "form_b_reference": CandidateField(value="B-118", source="staff"),
         }
     )
+    for name in REQUIRED_FIELD_NAMES:
+        fields.setdefault(name, CandidateField(value=f"value-{name}", source="guest_answer"))
     candidate = CandidateFormC(case_id=metadata.case_id, fields=fields)
     store.save_candidate(candidate)
     store.update_status(metadata.case_id, CaseStatus.READY_FOR_FILING, "Ready")

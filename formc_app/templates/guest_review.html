@@ -9,7 +9,15 @@
   {% for definition, field in fields %}
   <label class="review-field">
     <span><b>{{ definition.label }}</b><small>{{ 'Passport photograph' if field.source == 'passport_dummy' else 'Visa photograph' }}</small></span>
-    <input name="{{ definition.name }}" value="{{ field.value or '' }}" required>
+    {% if definition.choices %}
+    <select name="{{ definition.name }}" required>
+      {% for value, label in definition.choices %}
+      <option value="{{ value }}" {{ 'selected' if field.value == value else '' }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <input type="{{ definition.input_type }}" name="{{ definition.name }}" value="{{ field.value or '' }}" required>
+    {% endif %}
     <em>Tap and type only if incorrect</em>
   </label>
   {% endfor %}

@@ -110,3 +110,18 @@ PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
 Staff completes the normal login and CAPTCHA, then the catalogue runs immediately before that browser closes. The future Filing Worker will likewise remain alive from Portal Session Renewal through authorised processing; a worker restart requires renewal.
 
 The catalogue is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels, select options and static radio/checkbox choice codes in the gitignored `data/portal-controls.json`; it excludes current text/file values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. The explicit Candidate mapping and its fail-closed gaps are documented in `docs/stage-2-control-mapping.md`. Live submission remains disabled.
+
+The confirmed, unconditional live fields are now represented in the Candidate and collected through the existing one-question-at-a-time guest wizard. Closed sex, employment and purpose-of-visit answers reject unknown values. Destination branching, special category, conditional visa subtype and the guest-photo rule remain explicit blockers; no live form is filled.
+
+Yeratta's India reference address is Filing Worker configuration, not a guest answer. Create the gitignored `data/property.json` locally with the portal's exact state and district option codes:
+
+```json
+{
+  "reference_address": "LOCAL YERATTA REFERENCE ADDRESS",
+  "reference_state_code": "PORTAL STATE OPTION VALUE",
+  "reference_district_code": "PORTAL DISTRICT OPTION VALUE",
+  "reference_pin_code": "000000"
+}
+```
+
+Replace every placeholder locally. Do not commit the real property configuration. The live adapter will fail closed if this locked file is missing or invalid.
