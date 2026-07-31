@@ -1,86 +1,41 @@
 # Authorised Form III route verification
 
-## Purpose
+## Outcome
 
-Resolve whether Yeratta Resort can submit Form III filings and departure updates without staff action through an authorised government route.
+Yeratta Resort reports verbal confirmation by phone from the responsible official that:
 
-Do not place portal credentials, CAPTCHA values, guest identity data, session tokens, or unredacted screenshots in GitHub, email, or chat. Use only the resort's authorised account and genuine operational records. Do not submit synthetic guest data, intentionally create duplicates, inspect hidden endpoints, solve CAPTCHA through a third party, or bypass an access control.
+- unattended browser submission using the resort's authorised account is permitted;
+- the existing physical Form B register signature made with pen satisfies the guest-signature requirement; and
+- the portal acknowledgement number is sufficient filing evidence.
 
-## Local portal observation
+Written confirmation was not obtained. Authorised local observations established that CAPTCHA appears only at login, not at final submission; the session survives browser restart and normally persists until logout; and acknowledgement numbers remain retrievable through Departures.
 
-Open the official [Form III login](https://indianfrro.gov.in/frro/FormC/login.jsp) from the resort's normal connection and record only behaviour and field names.
+The accepted version-1 route is a persistent local browser worker. Rare staff Portal Session Renewal is permitted when authentication expires, but staff never handle an individual filing.
 
-### Authentication
+## Safety boundary
 
-- CAPTCHA location: login only, session renewal, each filing, departure update, or another event.
-- Session lifetime: normal use, idle timeout, browser restart, and password change.
-- Whether a lawful authenticated session survives long enough for unattended queued filings.
-- Whether concurrent sessions are allowed.
-- Any notices or conditions concerning automation, integration, or account use.
+Do not place portal credentials, CAPTCHA values, guest identity data, session tokens, or unredacted screenshots in GitHub, email, or chat. Use only the resort's authorised account and genuine operational records. Do not submit synthetic guest data, create deliberate duplicates, inspect hidden endpoints, use third-party CAPTCHA solving, or bypass access controls.
 
-### Filing workflow
+## Verified operating behaviour
 
-Using the next genuine filing, record:
+- CAPTCHA: login only.
+- Final submission: no additional CAPTCHA.
+- Session: survives full browser restart and normally lasts until explicit logout.
+- Success proof: government acknowledgement number.
+- Later verification: acknowledgement remains available in Departures.
+- Guest signature: existing physical Form B register signed with pen.
+- Account maintenance: rare Portal Session Renewal is acceptable; per-filing human action is not.
 
-- every arrival and departure field, mandatory marker, format rule, and validation message;
-- how guest signature is captured, stored, displayed, and inspected;
-- save-draft behaviour;
-- the final submission step;
-- the exact success state and stable government identifier;
-- any printable/downloadable filed record;
-- the filed-history view;
-- correction or amendment behaviour;
-- how a naturally occurring retry, timeout, or duplicate warning is handled.
+## Architecture decision rule
 
-Do not deliberately trigger duplicate or invalid government submissions.
+The route is acceptable only while all of the following remain true:
 
-### Filing Evidence
+- the persistent authorised session can submit and verify filings without staff handling individual cases;
+- loss of authentication is detected before submission and cases queue safely;
+- staff are asked only for Portal Session Renewal;
+- exact submitted values and the acknowledgement number form a tamper-evident Evidence Package;
+- acknowledgements are reconciled later against Departures;
+- the Form B register entry is linked to the electronic case; and
+- no CAPTCHA solving, credential sharing, access-control bypass, or hidden endpoint use occurs.
 
-Determine which official artefact proves acceptance:
-
-- acknowledgement or reference number;
-- filed-record view;
-- printable/downloadable Form III;
-- receipt;
-- another authoritative status.
-
-A locally generated “request sent” message or screenshot is not sufficient by itself.
-
-### Su-Swagatam
-
-Using an authorised device/account, establish whether the current Indian Visa Su-Swagatam application provides an accommodation-keeper Form III workflow and whether that route avoids repeated human authentication. Do not assume that visitor-facing features support hotel filing.
-
-## Written official enquiry
-
-Send the same enquiry to:
-
-- the resort's responsible South Andaman Foreigners Registration Officer, using the official contact already associated with its accommodation registration; and
-- the portal's published technical-support address: `nic-frmcadm@nic.in`.
-
-### Suggested subject
-
-Authorised unattended Form III integration and electronic-signature clarification for Yeratta Resort
-
-### Draft
-
-Yeratta Resort is registered to file accommodation Form III particulars for foreign guests. We are planning a system that collects and validates the required particulars and then submits arrival and departure information through an authorised government channel.
-
-Please confirm the following in writing:
-
-1. Is an official API, bulk-upload facility, PMS/channel-manager integration, service account, IP allowlisting arrangement, or other machine-to-machine route available for Form III arrival and departure filing?
-2. If no API exists, is unattended browser automation using the resort's own authorised account permitted? If so, what approval, security, session, CAPTCHA, or operational conditions apply?
-3. Does Indian Visa Su-Swagatam currently support Form III submission by accommodation keepers, and is any integration interface available?
-4. Rule 17 requires the foreign guest's signature on arrival. May the resort capture a signature on a touchscreen and retain it electronically with the guest's Form III particulars? If yes, what signature format, consent wording, timestamp, identity linkage, retention, and inspection requirements apply? Is another signature method required?
-5. What portal-generated acknowledgement or record should the resort retain as authoritative evidence of successful arrival and departure transmission?
-6. Are there any current technical specifications, notices, integration guidelines, or approval forms that the resort should follow?
-
-The proposed system will not use CAPTCHA-solving services, bypass access controls, or share credentials. We would appreciate the correct technical and jurisdictional contact if these questions should be directed elsewhere.
-
-## Decision rule
-
-The mandatory Fully Unattended Submission requirement passes only if at least one route is both:
-
-- authorised in writing or expressly documented by the responsible authority; and
-- technically able to submit, verify, and retain Filing Evidence without recurring staff action.
-
-If every authorised route requires a person to complete CAPTCHA, sign in, or confirm each filing, fully unattended version 1 is not feasible under the accepted constraint. The architecture must report this as a no-go decision rather than conceal a manual step.
+If portal behaviour or official direction changes so that every filing requires human authentication or confirmation, the mandatory Fully Unattended Submission requirement becomes a no-go until an authorised route is restored.
