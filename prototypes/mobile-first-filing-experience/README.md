@@ -10,9 +10,13 @@ This throwaway UI prototype contains fictional data and performs no OCR, documen
 
 Open `preview.html` directly. No installation or server is required.
 
-The preview opens directly on the chronological case for the expired-session example, with the fake government login and CAPTCHA visible. Use the floating arrows to reach the other surfaces.
+The preview opens directly on Outstanding Cases. Tap **Government site** or **Laptop needs login** to open the expired-session example with the mock login and CAPTCHA visible. Use the floating arrows to reach the other surfaces.
 
-The Outstanding Cases surface also keeps **Outstanding cases** and **Government site** tabs visible at every viewport width. Opening Government site selects the active session-renewal case when one exists, making the login and CAPTCHA immediately reachable.
+The Outstanding Cases surface keeps **Outstanding cases** and **Government site** tabs visible at every viewport width. Every visible control has a working demo result: worker status, tabs, date filter, case rows, camera capture and reset. Opening Government site selects the active session-renewal case when one exists, making the login and CAPTCHA immediately reachable.
+
+The government pane is a local mock external website. Enter CAPTCHA `4261`, then use its action button to run the worker, seal pre-submit evidence, submit, retrieve the acknowledgement, open Departures and reconcile the case. The same state changes can also be driven from the task pane, so both sides of the two-pane interaction can be tested.
+
+After the snapshot is sealed, **Pre-submit evidence sealed** becomes a link in the task timeline. Tapping it opens the government pane and shows the evidence ID, its pre-submission timing and the linked case.
 
 The route has three structurally different mobile-first surfaces, switchable with the floating control:
 
