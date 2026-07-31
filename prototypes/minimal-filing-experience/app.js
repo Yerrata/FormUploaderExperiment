@@ -156,9 +156,10 @@ function actionText(item) {
 function advance(item) {
   if (!item) return;
   if (item.status === "needs_guest") {
-    if (item.fields["Next destination"] === "Missing") item.fields["Next destination"] = "Port Blair";
-    if (item.fields["Arrived from"] === "Missing") item.fields["Arrived from"] = "Delhi";
-    item.messages.push(["guest", item.fields["Next destination"] === "Port Blair" ? "Port Blair" : "Delhi"]);
+    let answer = "Port Blair";
+    if (item.fields["Next destination"] === "Missing") item.fields["Next destination"] = answer;
+    if (item.fields["Arrived from"] === "Missing") { answer = "Delhi"; item.fields["Arrived from"] = answer; }
+    item.messages.push(["guest", answer]);
     item.messages.push(["system", "Thanks. Your details are now complete."]);
     item.status = "ready"; item.step = 2; item.issue = null; item.next = "Open the government form";
   } else if (["blocked_auth", "blocked_data"].includes(item.status)) {
