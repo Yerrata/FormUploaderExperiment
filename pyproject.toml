@@ -27,6 +27,7 @@ formc-app = "formc_app.cli:main"
 formc-worker = "formc_app.worker:main"
 formc-portal-login = "formc_app.portal_session:main"
 formc-portal-catalogue = "formc_app.portal_catalogue:main"
+formc-fill-plan = "formc_app.fill_plan:main"
 
 [tool.setuptools.packages.find]
 include = ["formc_app*"]

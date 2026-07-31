@@ -185,6 +185,16 @@ class CaseStore:
             return
         self._atomic_write(path, self._json_bytes(filing_request))
 
+    def load_filing_request(self, case_id: str) -> FilingRequest | None:
+        path = self._case_dir(case_id) / "filing-request.json"
+        if not path.exists():
+            return None
+        return FilingRequest.model_validate_json(path.read_text("utf-8"))
+
+    def save_fill_plan(self, case_id: str, fill_plan: Any) -> None:
+        path = self._case_dir(case_id) / "fill-plan.json"
+        self._atomic_write(path, self._json_bytes(fill_plan))
+
     def load_candidate(self, case_id: str) -> CandidateFormC | None:
         path = self._case_dir(case_id) / "candidate.json"
         if not path.exists():

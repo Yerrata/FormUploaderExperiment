@@ -125,3 +125,11 @@ Yeratta's India reference address is Filing Worker configuration, not a guest an
 ```
 
 Replace every placeholder locally. Do not commit the real property configuration. The live adapter will fail closed if this locked file is missing or invalid.
+
+Build the deterministic Stage 2 preflight for one sealed Filing Request with:
+
+```bash
+.venv/bin/python -m formc_app.fill_plan YRT-YYYYMMDD-XXXX --data-dir data
+```
+
+This is an offline operation. It does not open a browser, fill a live control or submit anything. It atomically writes `data/cases/<case-id>/fill-plan.json`, verifies that the Candidate still matches the sealed Filing Request, validates every prepared operation against the redacted control catalogue and records all remaining blockers. The current plan is expected to report `BLOCKED` until the unresolved live semantics in `docs/stage-2-control-mapping.md` are confirmed.
