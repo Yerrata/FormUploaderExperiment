@@ -162,7 +162,7 @@
     .prototype-switcher { position: fixed; z-index: 20; left: 50%; bottom: max(12px,env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 9px; padding: 7px; border-radius: 999px; color: white; background: #101713; box-shadow: var(--shadow); }
     .prototype-switcher button { width: 36px; height: 36px; border: 0; border-radius: 50%; color: white; background: rgba(255,255,255,.12); font-size: 17px; }
     .variant-name { min-width: 165px; text-align: center; font-size: 11px; font-weight: 800; }
-    @media (min-width: 900px) {
+    @media (min-width: 700px) {
       .app-shell { max-width: 1180px; }
       .page { padding: 24px 28px 40px; }
       .home-desktop { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; align-items: start; }
@@ -187,9 +187,9 @@
       {id:'YRT-044',guest:'Marta Silva',initials:'MS',date:'2026-07-31',room:'Palm 01',source:'Walk-in',status:'session',progress:3,passport:true,visa:true,ack:null,evidence:null},
       {id:'YRT-040',guest:'Aiko Tanaka',initials:'AT',date:'2026-07-30',room:'Lagoon 06',source:'Booking.com',status:'filed',progress:7,passport:true,visa:true,ack:'ANI-040-3712',evidence:'PRE-YRT-040-116'}
     ];
-    let cases=structuredClone(initialCases),selectedDate='2026-07-31',selectedId='YRT-043',captureStep=1,captureData={passport:false,visa:false},mobilePane='tasks';
+    let cases=structuredClone(initialCases),selectedDate='2026-07-31',selectedId='YRT-044',captureStep=1,captureData={passport:false,visa:false},mobilePane='government';
     const stages=['Documents captured','Required details complete','Laptop worker filing','Pre-submit evidence sealed','Submit Form C','Acknowledgement captured','Departure reconciled'];
-    function variant(){const value=new URLSearchParams(location.search).get('variant')?.toUpperCase();return variants[value]?value:'A'}
+    function variant(){const value=new URLSearchParams(location.search).get('variant')?.toUpperCase();return variants[value]?value:'B'}
     function setVariant(value){const url=new URL(location.href);url.searchParams.set('variant',value);history.replaceState({},'',url);render()}
     function cycle(direction){const keys=Object.keys(variants),index=keys.indexOf(variant());setVariant(keys[(index+direction+keys.length)%keys.length])}
     function selected(){return cases.find(item=>item.id===selectedId)||cases[0]}
