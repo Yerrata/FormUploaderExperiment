@@ -25,3 +25,5 @@ The task pane cannot submit. It only opens the filled government form. The manag
 After the snapshot is sealed, **Pre-submit evidence sealed** becomes a link in the task timeline. Tapping it opens the government page and shows the evidence ID, pre-submission timing and linked case.
 
 On a supporting phone browser, the capture input uses `capture="environment"` to open the rear camera. **Use demo photo** exercises the same prototype flow without selecting identity documents. Dummy JSON replaces passport extraction until the end-to-end usability is accepted.
+
+After the two photos, the prototype now stops on **Review what the phone read**. It displays every candidate Form C value together with its source: Passport photo, Visa photo, Booking, guest answer or staff entry. The same candidate-data card remains visible in **Data & tasks**, and the mock government page is filled from the same data structure so the values can be compared directly.
