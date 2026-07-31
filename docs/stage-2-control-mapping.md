@@ -74,6 +74,20 @@ The India reference address, state, district and PIN code come from one locked `
 
 `tmpsbmt` and `pmsbmt` are live submission-related controls. The adapter must not click either during mapping or fill-only development. Human-reviewed submission remains disabled until the filled live page has been manually checked and a separate explicit release gate is approved.
 
+## Deterministic offline preflight
+
+`formc_app/fill_plan.py` compiles a sealed Candidate, locked property configuration and redacted portal catalogue into an atomic per-case `fill-plan.json`. It does not launch or interact with a browser and cannot fill or submit a form.
+
+The compiler:
+
+- verifies Candidate confirmation, readiness and the Filing Request hash;
+- formats confirmed dates and frozen choice codes deterministically;
+- resolves country and visa-type options only by one exact normalized catalogue label;
+- rejects missing, duplicate, disabled, read-only or structurally changed controls and options;
+- excludes room metadata and both live submission controls;
+- keeps live filling and live submission explicitly disabled;
+- reports every unresolved semantic item above as a blocker rather than guessing.
+
 ## Structural probe status
 
 Complete. The final catalogue captured all 55 controls and the four safe radio choice codes. Values from text, file, hidden, password and button inputs remain excluded.
