@@ -12,6 +12,8 @@ Open `preview.html` directly. No installation or server is required.
 
 The preview opens directly on Outstanding Cases. Tap **Government site** or **Laptop needs login** to open the expired-session example with the mock login and CAPTCHA visible. Use the floating arrows to reach the other surfaces.
 
+**Laptop needs login** has two large tap targets on Outstanding Cases: the persistent header status and an explicit **Open login →** alert. Both open the same mock CAPTCHA screen.
+
 The Outstanding Cases surface keeps **Outstanding cases** and **Government site** tabs visible at every viewport width. Every visible control has a working demo result: worker status, tabs, date filter, case rows, camera capture and reset. Opening Government site selects the active session-renewal case when one exists, making the login and CAPTCHA immediately reachable.
 
 The government pane is a local mock external website. Enter CAPTCHA `4261`, then use its action button to run the worker and seal pre-submit evidence. At that point the task pane can only open the filled government form: the manager must review it and click **I checked it — Submit Form C** on the government page. The prototype then captures the acknowledgement automatically. Departures lookup and reconciliation remain available from the government pane.
