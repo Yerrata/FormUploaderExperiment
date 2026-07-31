@@ -16,6 +16,10 @@ _Avoid_: Guest account, open kiosk session
 Identity documents or answers supplied directly by the guest during a Guest Session.
 _Avoid_: Staff intervention, voluntary data
 
+**Guest-Corrected Field**:
+A Critical Field for which the guest rejected the extracted candidate and supplied a replacement while the original value and its provenance remain recorded.
+_Avoid_: Verified field, OCR overwrite
+
 **Candidate Form C**:
 The normalised, not-yet-filed set of required particulars, document provenance and validation outcomes for one guest stay.
 _Avoid_: Form C submission, extracted JSON
