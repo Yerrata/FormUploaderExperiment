@@ -19,3 +19,11 @@ _Avoid_: Fully automated when staff must complete a CAPTCHA or submission step
 **Filing Evidence**:
 The stored government acknowledgement or receipt, linked to the submitted Form C data and the relevant guest identity documents.
 _Avoid_: Success message, screenshot-only proof
+
+**Verified Filing**:
+A Form C Filing whose government acceptance and submitted values are supported by Filing Evidence.
+_Avoid_: A request sent to the portal, a successful click, or an HTTP success response
+
+**Critical Field**:
+A required guest identity, travel, or stay value whose incorrect value could misidentify the guest or make the filing materially incorrect.
+_Avoid_: A field accepted only because an extraction confidence threshold was exceeded
