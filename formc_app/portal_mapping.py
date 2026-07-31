@@ -119,6 +119,8 @@ CANDIDATE_PORTAL_MAPPINGS = (
 
 
 LIVE_SUBMISSION_CONTROL_IDS = frozenset({"tmpsbmt", "pmsbmt"})
+EMPLOYMENT_CHOICE_CODES = {"yes": "Y", "no": "N"}
+NEXT_DESTINATION_SCOPE_CODES = {"india": "I", "outside_india": "O"}
 
 
 def mapping_by_candidate_field() -> dict[str, CandidatePortalMapping]:
