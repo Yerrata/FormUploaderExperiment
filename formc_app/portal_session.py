@@ -112,16 +112,15 @@ class PortalSessionManager:
         validate_portal_url(self.portal_url)
         self._prepare_profile()
         deadline = time.monotonic() + timeout_seconds
-        context = None
         last_location = safe_portal_location(self.portal_url)
 
-        try:
-            with sync_playwright() as playwright:
-                context = playwright.chromium.launch_persistent_context(
-                    user_data_dir=str(self.profile_dir),
-                    headless=False,
-                    viewport=None,
-                )
+        with sync_playwright() as playwright:
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                headless=False,
+                viewport=None,
+            )
+            try:
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto(self.portal_url, wait_until="domcontentloaded")
 
@@ -146,8 +145,7 @@ class PortalSessionManager:
                 )
                 self._save_snapshot(snapshot)
                 return snapshot
-        finally:
-            if context is not None:
+            finally:
                 context.close()
 
 

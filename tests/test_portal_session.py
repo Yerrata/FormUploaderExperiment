@@ -51,11 +51,14 @@ class FakeContext:
     def __init__(self, page: FakePage):
         self.pages = [page]
         self.closed = False
+        self.playwright_stopped = False
 
     def new_page(self) -> FakePage:
         raise AssertionError("The existing persistent-profile page should be reused")
 
     def close(self) -> None:
+        if self.playwright_stopped:
+            raise RuntimeError("Event loop is closed")
         self.closed = True
 
 
@@ -72,6 +75,7 @@ class FakePlaywrightContext:
         return self.value
 
     def __exit__(self, *_args):
+        self.context.playwright_stopped = True
         return None
 
 

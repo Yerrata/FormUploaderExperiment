@@ -194,14 +194,13 @@ class PortalCatalogueManager:
         if not self.profile_dir.is_dir():
             raise RuntimeError("Run formc-portal-login before cataloguing controls")
 
-        context = None
-        try:
-            with sync_playwright() as playwright:
-                context = playwright.chromium.launch_persistent_context(
-                    user_data_dir=str(self.profile_dir),
-                    headless=False,
-                    viewport=None,
-                )
+        with sync_playwright() as playwright:
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                headless=False,
+                viewport=None,
+            )
+            try:
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto(self.portal_url, wait_until="domcontentloaded")
                 if not is_authenticated_form_c(page):
@@ -226,8 +225,7 @@ class PortalCatalogueManager:
                 ).encode("utf-8")
                 CaseStore._atomic_write(self.catalogue_path, content)
                 return catalogue
-        finally:
-            if context is not None:
+            finally:
                 context.close()
 
 
@@ -244,10 +242,14 @@ def main() -> None:
     args = parser.parse_args()
 
     print("Read-only catalogue: no controls will be filled, clicked or submitted.")
-    catalogue = PortalCatalogueManager(
-        data_root=args.data_dir,
-        portal_url=args.portal_url,
-    ).catalogue()
+    try:
+        catalogue = PortalCatalogueManager(
+            data_root=args.data_dir,
+            portal_url=args.portal_url,
+        ).catalogue()
+    except RuntimeError as error:
+        print(f"Catalogue stopped safely: {error}")
+        raise SystemExit(1) from None
     print(f"Catalogued {catalogue.control_count} safe controls")
     print(f"Saved {args.data_dir / 'portal-controls.json'}")
 
