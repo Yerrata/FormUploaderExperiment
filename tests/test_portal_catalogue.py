@@ -12,6 +12,7 @@ from formc_app.portal_catalogue import (
     safe_controls,
     save_page_catalogue,
 )
+from formc_app.portal_session import AUTHENTICATED_FORM_MARKERS
 
 
 class FakeCatalogueLocator:
@@ -40,6 +41,8 @@ class FakeCataloguePage:
             )
         if selector == "form input, form select, form textarea":
             return FakeCatalogueLocator(self.controls, count_override=12)
+        if selector == AUTHENTICATED_FORM_MARKERS:
+            return FakeCatalogueLocator(self.controls, count_override=3)
         return FakeCatalogueLocator(self.controls)
 
     def goto(self, url: str, **_kwargs):

@@ -21,6 +21,9 @@ from formc_app.storage import CaseStore
 DEFAULT_PORTAL_URL = "https://indianfrro.gov.in/frro/FormC"
 PORTAL_HOST = "indianfrro.gov.in"
 PORTAL_PATH_PREFIX = "/frro/FormC"
+AUTHENTICATED_FORM_MARKERS = (
+    '[name="applicant_surname"], [name="applicant_passpno"], #pmsbmt'
+)
 
 
 class PortalSessionState(StrEnum):
@@ -73,9 +76,14 @@ def is_authenticated_form_c(page: Page) -> bool:
             'input[type="password"], input[name*="captcha" i], img[src*="captcha" i]'
         ).count()
         form_controls = page.locator("form input, form select, form textarea").count()
+        authenticated_markers = page.locator(AUTHENTICATED_FORM_MARKERS).count()
     except Exception:
         return False
-    return credential_controls == 0 and form_controls >= 5
+    return (
+        credential_controls == 0
+        and form_controls >= 5
+        and authenticated_markers == 3
+    )
 
 
 @dataclass
