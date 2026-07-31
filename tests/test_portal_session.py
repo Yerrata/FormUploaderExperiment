@@ -169,6 +169,39 @@ def test_manager_uses_persistent_profile_and_writes_redacted_ready_snapshot(
     assert "secret" not in json.dumps(persisted)
 
 
+def test_manager_runs_authenticated_action_before_closing_browser(
+    tmp_path: Path,
+    monkeypatch,
+):
+    page = FakePage(
+        url="https://indianfrro.gov.in/frro/FormC/formc.jsp?t4g=secret"
+    )
+    context = FakeContext(page)
+    fake_playwright = FakePlaywrightContext(context)
+    monkeypatch.setattr(
+        "formc_app.portal_session.sync_playwright",
+        lambda: fake_playwright,
+    )
+    events = []
+
+    def authenticated_action(authenticated_page):
+        assert authenticated_page is page
+        assert not context.closed
+        assert not context.playwright_stopped
+        events.append("catalogued")
+
+    snapshot = PortalSessionManager(data_root=tmp_path).open_for_login(
+        timeout_seconds=0,
+        poll_seconds=0,
+        on_authenticated=authenticated_action,
+    )
+
+    assert snapshot.state == PortalSessionState.READY
+    assert events == ["catalogued"]
+    assert context.closed
+    assert context.playwright_stopped
+
+
 def test_manager_records_needs_login_without_persisting_query_token(
     tmp_path: Path,
     monkeypatch,

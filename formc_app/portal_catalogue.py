@@ -176,6 +176,30 @@ def catalogue_page_controls(page: Page) -> list[PortalControl]:
     return safe_controls(raw_controls)
 
 
+def save_page_catalogue(page: Page, path: Path) -> PortalControlCatalogue:
+    """Catalogue an already-authenticated page without navigating or interacting."""
+    if not is_authenticated_form_c(page):
+        raise RuntimeError("Authenticated Form C controls were not found")
+    controls = catalogue_page_controls(page)
+    if not controls:
+        raise RuntimeError("No safe Form C controls were found")
+    catalogue = PortalControlCatalogue(
+        portal_location=safe_portal_location(page.url),
+        control_count=len(controls),
+        controls=controls,
+    )
+    content = (
+        json.dumps(
+            catalogue.model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+    CaseStore._atomic_write(path, content)
+    return catalogue
+
+
 @dataclass
 class PortalCatalogueManager:
     data_root: Path
@@ -207,24 +231,7 @@ class PortalCatalogueManager:
                     raise RuntimeError(
                         "Authenticated Form C controls were not found; renew the portal session"
                     )
-                controls = catalogue_page_controls(page)
-                if not controls:
-                    raise RuntimeError("No safe Form C controls were found")
-                catalogue = PortalControlCatalogue(
-                    portal_location=safe_portal_location(page.url),
-                    control_count=len(controls),
-                    controls=controls,
-                )
-                content = (
-                    json.dumps(
-                        catalogue.model_dump(mode="json"),
-                        indent=2,
-                        sort_keys=True,
-                    )
-                    + "\n"
-                ).encode("utf-8")
-                CaseStore._atomic_write(self.catalogue_path, content)
-                return catalogue
+                return save_page_catalogue(page, self.catalogue_path)
             finally:
                 context.close()
 

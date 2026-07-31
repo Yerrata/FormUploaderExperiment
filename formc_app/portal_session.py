@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from playwright.sync_api import Page, sync_playwright
@@ -108,6 +109,7 @@ class PortalSessionManager:
         *,
         timeout_seconds: float = 600,
         poll_seconds: float = 1,
+        on_authenticated: Callable[[Page], None] | None = None,
     ) -> PortalSessionSnapshot:
         validate_portal_url(self.portal_url)
         self._prepare_profile()
@@ -127,6 +129,8 @@ class PortalSessionManager:
                 while True:
                     last_location = safe_portal_location(page.url)
                     if is_authenticated_form_c(page):
+                        if on_authenticated is not None:
+                            on_authenticated(page)
                         snapshot = PortalSessionSnapshot(
                             state=PortalSessionState.READY,
                             portal_location=last_location,
@@ -160,16 +164,42 @@ def main() -> None:
         help="Fresh official Form C URL; query parameters are never written to disk",
     )
     parser.add_argument("--timeout", type=float, default=600)
+    parser.add_argument(
+        "--catalogue",
+        action="store_true",
+        help="Safely catalogue controls in the same authenticated browser run",
+    )
     args = parser.parse_args()
 
     print("A dedicated Chromium window will open.")
     print("Complete the normal government login and CAPTCHA in that window.")
-    snapshot = PortalSessionManager(
-        data_root=args.data_dir,
-        portal_url=args.portal_url,
-    ).open_for_login(timeout_seconds=args.timeout)
+    captured_catalogue = None
+
+    def capture_controls(page: Page) -> None:
+        nonlocal captured_catalogue
+        from formc_app.portal_catalogue import save_page_catalogue
+
+        captured_catalogue = save_page_catalogue(
+            page,
+            args.data_dir / "portal-controls.json",
+        )
+
+    try:
+        snapshot = PortalSessionManager(
+            data_root=args.data_dir,
+            portal_url=args.portal_url,
+        ).open_for_login(
+            timeout_seconds=args.timeout,
+            on_authenticated=capture_controls if args.catalogue else None,
+        )
+    except RuntimeError as error:
+        print(f"Portal helper stopped safely: {error}")
+        raise SystemExit(1) from None
     print(f"Portal session: {snapshot.state}")
     print(snapshot.message)
+    if captured_catalogue is not None:
+        print(f"Catalogued {captured_catalogue.control_count} safe controls")
+        print(f"Saved {args.data_dir / 'portal-controls.json'}")
     if snapshot.state != PortalSessionState.READY:
         raise SystemExit(1)
 
