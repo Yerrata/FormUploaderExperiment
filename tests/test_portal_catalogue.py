@@ -130,6 +130,20 @@ def sample_controls():
         {
             "ordinal": 3,
             "tag": "input",
+            "name": "employed",
+            "element_id": None,
+            "input_type": "radio",
+            "choice_value": "Y",
+            "label": "Whether employed in India",
+            "required": True,
+            "disabled": False,
+            "read_only": False,
+            "multiple": False,
+            "options": [],
+        },
+        {
+            "ordinal": 4,
+            "tag": "input",
             "name": "captchaAnswer",
             "element_id": "captchaAnswer",
             "input_type": "text",
@@ -146,12 +160,17 @@ def sample_controls():
 def test_safe_controls_excludes_values_hidden_and_credential_like_controls():
     controls = safe_controls(sample_controls())
 
-    assert [control.name for control in controls] == ["surname", "nationality"]
+    assert [control.name for control in controls] == [
+        "surname",
+        "nationality",
+        "employed",
+    ]
     serialized = json.dumps([control.model_dump(mode="json") for control in controls])
     assert "MUST NOT BE PERSISTED" not in serialized
     assert "csrf" not in serialized.lower()
     assert "captcha" not in serialized.lower()
     assert controls[1].options[1].value == "826"
+    assert controls[2].choice_value == "Y"
 
 
 def test_catalogue_page_controls_only_evaluates_the_read_only_selector():
@@ -159,7 +178,11 @@ def test_catalogue_page_controls_only_evaluates_the_read_only_selector():
 
     controls = catalogue_page_controls(page)
 
-    assert [control.name for control in controls] == ["surname", "nationality"]
+    assert [control.name for control in controls] == [
+        "surname",
+        "nationality",
+        "employed",
+    ]
 
 
 def test_save_page_catalogue_uses_the_existing_authenticated_page(tmp_path: Path):
@@ -167,7 +190,7 @@ def test_save_page_catalogue_uses_the_existing_authenticated_page(tmp_path: Path
 
     catalogue = save_page_catalogue(page, tmp_path / "portal-controls.json")
 
-    assert catalogue.control_count == 2
+    assert catalogue.control_count == 3
     assert (tmp_path / "portal-controls.json").is_file()
     assert "secret" not in (tmp_path / "portal-controls.json").read_text("utf-8")
 
@@ -187,7 +210,7 @@ def test_manager_uses_existing_profile_and_writes_redacted_catalogue(
 
     catalogue = PortalCatalogueManager(data_root=tmp_path).catalogue()
 
-    assert catalogue.control_count == 2
+    assert catalogue.control_count == 3
     assert browser_context.closed
     persisted = (tmp_path / "portal-controls.json").read_text("utf-8")
     assert "t4g" not in persisted

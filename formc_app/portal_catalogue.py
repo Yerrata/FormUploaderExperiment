@@ -29,6 +29,7 @@ CONTROL_SCRIPT = r"""
     return collapsed ? collapsed.slice(0, 200) : null;
   };
   const tag = element.tagName.toLowerCase();
+  const inputType = element.getAttribute("type")?.toLowerCase() || null;
   const id = element.getAttribute("id");
   const associatedLabel = id
     ? document.querySelector(`label[for="${CSS.escape(id)}"]`)
@@ -49,7 +50,10 @@ CONTROL_SCRIPT = r"""
     tag,
     name: element.getAttribute("name"),
     element_id: id,
-    input_type: element.getAttribute("type"),
+    input_type: inputType,
+    choice_value: ["radio", "checkbox"].includes(inputType)
+      ? String(element.value).slice(0, 200)
+      : null,
     label,
     required: Boolean(element.required) || element.getAttribute("aria-required") === "true",
     disabled: Boolean(element.disabled),
@@ -93,6 +97,7 @@ class PortalControl(BaseModel):
     name: str | None = None
     element_id: str | None = None
     input_type: str | None = None
+    choice_value: str | None = None
     label: str | None = None
     required: bool = False
     disabled: bool = False
@@ -155,6 +160,11 @@ def safe_controls(raw_controls: list[dict[str, Any]]) -> list[PortalControl]:
                 name=name,
                 element_id=element_id,
                 input_type=input_type,
+                choice_value=(
+                    _clean_text(raw.get("choice_value"))
+                    if input_type and input_type.lower() in {"radio", "checkbox"}
+                    else None
+                ),
                 label=_clean_text(raw.get("label")),
                 required=bool(raw.get("required", False)),
                 disabled=bool(raw.get("disabled", False)),
