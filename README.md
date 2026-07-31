@@ -81,3 +81,21 @@ Writes use a temporary file, disk flush and atomic rename. A worker claim is rep
 Stage 1 stores sensitive test documents locally. Before using real guest documents, the Filing Worker must have operating-system full-disk encryption enabled, such as FileVault on macOS or BitLocker on Windows, a locked staff account and an encrypted backup. Application retention and deletion controls are completed before the live Stage 2 pilot.
 
 The guest link grants access to one case only. It becomes read-only immediately after the guest creates the Filing Request. Government credentials and the real authenticated portal are deliberately absent from Stage 1.
+
+## Stage 2 preview: authorised portal login
+
+The first Stage 2 component uses a dedicated persistent Chromium profile for the government portal. It does not bypass CAPTCHA, fill a live form or submit anything. Staff completes the normal login and CAPTCHA once; the helper reports ready only after it detects a plausible authenticated Form C form on the official HTTPS host.
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers .venv/bin/formc-portal-login
+```
+
+If the portal gave staff a fresh signed Form C URL, pass it only for that run:
+
+```bash
+FORMC_PORTAL_URL='https://indianfrro.gov.in/frro/FormC/formc.jsp?...' \
+  PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
+  .venv/bin/formc-portal-login
+```
+
+The browser profile is stored under `data/portal-browser-profile/` and should be accessible only to Yeratta's Filing Worker account. `data/portal-session.json` records readiness without saving the URL query or browser cookies. The next Stage 2 slice will use this profile to catalogue and map live Form C controls, but live submission remains disabled.
