@@ -13,8 +13,12 @@ Information or identity documents supplied directly by the guest, including answ
 _Avoid_: Staff intervention
 
 **Fully Unattended Submission**:
-A Form C Filing that proceeds from complete required input through validation, government submission, receipt retrieval, and evidence storage without staff action. Guest Input may occur before submission; bypassing or circumventing access controls is excluded.
-_Avoid_: Fully automated when staff must complete a CAPTCHA or submission step
+A Form C Filing that proceeds without human handling of the individual case. Rare Portal Session Renewal is permitted, but staff never enter, review, submit, or evidence a guest filing; bypassing access controls remains excluded.
+_Avoid_: Automated filing that still requires staff to handle an individual form
+
+**Portal Session Renewal**:
+Restoration of the resort's authorised government session when the portal expires authentication or forces an account change, performed independently of any guest case.
+_Avoid_: Manual CAPTCHA or login performed for each filing
 
 **Filing Evidence**:
 The stored government acknowledgement or receipt, linked to the submitted Form C data and the relevant guest identity documents.
