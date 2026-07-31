@@ -15,6 +15,7 @@ from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue
 from formc_app.portal_mapping import (
     EMPLOYMENT_CHOICE_CODES,
     LIVE_SUBMISSION_CONTROL_IDS,
+    PROPERTY_CONFIG_PORTAL_CONTROLS,
     PURPOSE_OF_VISIT_CHOICE_CODES,
     SEX_CHOICE_CODES,
 )
@@ -39,6 +40,7 @@ class FillAction(StrEnum):
 
 class FillValueSource(StrEnum):
     CANDIDATE = "CANDIDATE"
+    PROPERTY_CONFIGURATION = "PROPERTY_CONFIGURATION"
     CONSTANT = "CONSTANT"
 
 
@@ -46,11 +48,12 @@ class FillOperation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sequence: int
-    candidate_field: str
+    source_field: str
     portal_control: str
     action: FillAction
     value: str
     value_source: FillValueSource
+    runtime_option_check_required: bool = False
 
 
 class FillBlocker(BaseModel):
@@ -141,10 +144,6 @@ GLOBAL_BLOCKERS = (
         code="guest_photo_policy_unresolved",
         message="No approved guest-photo source and suitability policy exists yet.",
     ),
-    FillBlocker(
-        code="property_control_mapping_unresolved",
-        message="Property configuration is valid, but its exact portal control identifiers are not frozen.",
-    ),
 )
 
 
@@ -214,6 +213,8 @@ class _PlanBuilder:
         action: FillAction,
         value: str,
         source: FillValueSource = FillValueSource.CANDIDATE,
+        source_field: str | None = None,
+        runtime_option_check_required: bool = False,
     ) -> None:
         if control in LIVE_SUBMISSION_CONTROL_IDS:
             self.block(
@@ -225,15 +226,25 @@ class _PlanBuilder:
         self.operations.append(
             FillOperation(
                 sequence=len(self.operations) + 1,
-                candidate_field=field,
+                source_field=source_field
+                or f"{source.value.casefold()}.{field}",
                 portal_control=control,
                 action=action,
                 value=value,
                 value_source=source,
+                runtime_option_check_required=runtime_option_check_required,
             )
         )
 
-    def fill_text(self, *, field: str, control: str, value: str) -> None:
+    def fill_text(
+        self,
+        *,
+        field: str,
+        control: str,
+        value: str,
+        source: FillValueSource = FillValueSource.CANDIDATE,
+        source_field: str | None = None,
+    ) -> None:
         portal_control = self._single_control(control, field=field)
         if portal_control is None:
             return
@@ -256,6 +267,8 @@ class _PlanBuilder:
             control=control,
             action=FillAction.FILL_TEXT,
             value=value,
+            source=source,
+            source_field=source_field,
         )
 
     def select_value(
@@ -265,6 +278,7 @@ class _PlanBuilder:
         control: str,
         value: str,
         source: FillValueSource = FillValueSource.CANDIDATE,
+        source_field: str | None = None,
     ) -> None:
         portal_control = self._single_control(
             control,
@@ -291,6 +305,39 @@ class _PlanBuilder:
             action=FillAction.SELECT_OPTION,
             value=value,
             source=source,
+            source_field=source_field,
+        )
+
+    def select_dynamic_value(
+        self,
+        *,
+        field: str,
+        control: str,
+        value: str,
+        source_field: str,
+    ) -> None:
+        portal_control = self._single_control(
+            control,
+            field=field,
+            expected_tag="select",
+        )
+        if portal_control is None:
+            return
+        if not value:
+            self.block(
+                "property_option_missing",
+                f"Locked property value for {field} is empty.",
+                field=field,
+            )
+            return
+        self._append(
+            field=field,
+            control=control,
+            action=FillAction.SELECT_OPTION,
+            value=value,
+            source=FillValueSource.PROPERTY_CONFIGURATION,
+            source_field=source_field,
+            runtime_option_check_required=True,
         )
 
     def select_label(self, *, field: str, control: str, label: str) -> None:
@@ -459,6 +506,34 @@ def compile_fill_plan(
     for field, (code, message) in BLOCKED_CANDIDATE_FIELDS.items():
         _candidate_value(candidate, field, builder)
         builder.block(code, message, field=field)
+
+    builder.fill_text(
+        field="reference_address",
+        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_address"],
+        value=property_config.reference_address,
+        source=FillValueSource.PROPERTY_CONFIGURATION,
+        source_field="property.reference_address",
+    )
+    builder.select_value(
+        field="reference_state_code",
+        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_state_code"],
+        value=property_config.reference_state_code,
+        source=FillValueSource.PROPERTY_CONFIGURATION,
+        source_field="property.reference_state_code",
+    )
+    builder.select_dynamic_value(
+        field="reference_district_code",
+        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_district_code"],
+        value=property_config.reference_district_code,
+        source_field="property.reference_district_code",
+    )
+    builder.fill_text(
+        field="reference_pin_code",
+        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_pin_code"],
+        value=property_config.reference_pin_code,
+        source=FillValueSource.PROPERTY_CONFIGURATION,
+        source_field="property.reference_pin_code",
+    )
 
     builder.blockers.extend(GLOBAL_BLOCKERS)
 

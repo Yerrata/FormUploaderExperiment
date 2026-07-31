@@ -75,6 +75,8 @@ def _catalogue() -> PortalControlCatalogue:
         "applicant_visatype": [("e-Tourist", "ET")],
         "applicant_arrivedfromcountry": [("India", "IND")],
         "applicant_purpovisit": [("Tourism", "16")],
+        "applicant_refstate": [("ANDAMAN AND NICOBAR ISLANDS", "1")],
+        "applicant_refstatedistr": [("Select", "")],
     }
     for name, options in option_controls.items():
         controls.append(_select_control(name, len(controls), options))
@@ -83,6 +85,15 @@ def _catalogue() -> PortalControlCatalogue:
         controls.append(_radio_control("applicant_sex", len(controls), value))
     for value in ("Y", "N"):
         controls.append(_radio_control("employed", len(controls), value))
+    controls.append(
+        PortalControl(
+            ordinal=len(controls),
+            tag="textarea",
+            name="applicant_refaddr",
+            element_id="applicant_refaddr",
+        )
+    )
+    controls.append(_text_control("applicant_refpincode", len(controls)))
 
     return PortalControlCatalogue(
         portal_location="https://indianfrro.gov.in/frro/FormC/formc.jsp",
@@ -149,7 +160,7 @@ def _write_preflight_inputs(data_root: Path, catalogue: PortalControlCatalogue) 
     )
     property_config = YerattaPropertyConfig(
         reference_address="Yeratta local test address",
-        reference_state_code="35",
+        reference_state_code="1",
         reference_district_code="640",
         reference_pin_code="744211",
     )
@@ -171,23 +182,31 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     assert first.status == FillPlanStatus.BLOCKED
     assert first.live_fill_enabled is False
     assert first.live_submit_enabled is False
-    assert len(first.operations) == 27
+    assert len(first.operations) == 31
     assert {operation.portal_control for operation in first.operations}.isdisjoint(
         LIVE_SUBMISSION_CONTROL_IDS
     )
 
     operation_by_target = {
-        (operation.candidate_field, operation.portal_control): operation
+        (operation.source_field, operation.portal_control): operation
         for operation in first.operations
     }
-    assert operation_by_target[("sex", "applicant_sex")].value == "M"
-    assert operation_by_target[("sex", "applicant_sex")].action == FillAction.CHECK_RADIO
-    assert operation_by_target[("employed_in_india", "employed")].value == "N"
-    assert operation_by_target[("purpose_of_visit", "applicant_purpovisit")].value == "16"
-    assert operation_by_target[("date_of_birth", "dobformat")].value == "DY"
-    assert operation_by_target[("date_of_birth", "applicant_dob")].value == "17/02/1990"
-    assert operation_by_target[("check_in_date", "applicant_doarrivalhotel")].value == "31/07/2026"
-    assert operation_by_target[("nationality", "applicant_nationality")].value == "SGP"
+    assert operation_by_target[("candidate.sex", "applicant_sex")].value == "M"
+    assert operation_by_target[("candidate.sex", "applicant_sex")].action == FillAction.CHECK_RADIO
+    assert operation_by_target[("candidate.employed_in_india", "employed")].value == "N"
+    assert operation_by_target[("candidate.purpose_of_visit", "applicant_purpovisit")].value == "16"
+    assert operation_by_target[("constant.date_of_birth", "dobformat")].value == "DY"
+    assert operation_by_target[("candidate.date_of_birth", "applicant_dob")].value == "17/02/1990"
+    assert operation_by_target[("candidate.check_in_date", "applicant_doarrivalhotel")].value == "31/07/2026"
+    assert operation_by_target[("candidate.nationality", "applicant_nationality")].value == "SGP"
+    assert operation_by_target[("property.reference_address", "applicant_refaddr")].value == "Yeratta local test address"
+    assert operation_by_target[("property.reference_state_code", "applicant_refstate")].value == "1"
+    district = operation_by_target[
+        ("property.reference_district_code", "applicant_refstatedistr")
+    ]
+    assert district.value == "640"
+    assert district.runtime_option_check_required is True
+    assert operation_by_target[("property.reference_pin_code", "applicant_refpincode")].value == "744211"
 
     blocker_codes = {blocker.code for blocker in first.blockers}
     assert blocker_codes == {
@@ -198,7 +217,6 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
         "special_category_semantics_unresolved",
         "visa_subtype_condition_unresolved",
         "guest_photo_policy_unresolved",
-        "property_control_mapping_unresolved",
     }
     persisted = json.loads(
         (tmp_path / "cases" / case_id / "fill-plan.json").read_text("utf-8")
@@ -220,7 +238,7 @@ def test_preflight_detects_candidate_tampering_and_invalid_closed_choice(tmp_pat
     blocker_codes = {blocker.code for blocker in plan.blockers}
     assert "filing_request_hash_mismatch" in blocker_codes
     assert "candidate_choice_invalid" in blocker_codes
-    assert not any(operation.candidate_field == "sex" for operation in plan.operations)
+    assert not any(operation.source_field == "candidate.sex" for operation in plan.operations)
 
 
 def test_preflight_detects_safe_catalogue_drift(tmp_path: Path):
@@ -239,7 +257,7 @@ def test_preflight_detects_safe_catalogue_drift(tmp_path: Path):
         blocker.code == "catalogue_control_mismatch" and blocker.field == "surname"
         for blocker in plan.blockers
     )
-    assert not any(operation.candidate_field == "surname" for operation in plan.operations)
+    assert not any(operation.source_field == "candidate.surname" for operation in plan.operations)
 
 
 def test_every_candidate_field_has_a_fill_plan_policy():
