@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from formc_app.portal_session import (
+    AUTHENTICATED_FORM_MARKERS,
     PortalSessionManager,
     PortalSessionState,
     is_authenticated_form_c,
@@ -30,17 +31,20 @@ class FakePage:
         url: str,
         credential_controls: int = 0,
         form_controls: int = 12,
+        authenticated_markers: int = 3,
     ):
         self.url = url
         self.credential_controls = credential_controls
         self.form_controls = form_controls
+        self.authenticated_markers = authenticated_markers
 
     def locator(self, selector: str) -> FakeLocator:
-        count = (
-            self.credential_controls
-            if 'input[type="password"]' in selector
-            else self.form_controls
-        )
+        if 'input[type="password"]' in selector:
+            count = self.credential_controls
+        elif selector == AUTHENTICATED_FORM_MARKERS:
+            count = self.authenticated_markers
+        else:
+            count = self.form_controls
         return FakeLocator(count)
 
     def goto(self, url: str, **_kwargs) -> None:
@@ -96,6 +100,12 @@ def test_authenticated_form_requires_official_https_form_and_no_login_controls()
         FakePage(
             url="https://indianfrro.gov.in/frro/FormC/formc.jsp",
             form_controls=2,
+        )
+    )
+    assert not is_authenticated_form_c(
+        FakePage(
+            url="https://indianfrro.gov.in/frro/FormC/formc.jsp",
+            authenticated_markers=2,
         )
     )
 
