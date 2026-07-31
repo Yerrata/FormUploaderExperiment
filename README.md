@@ -27,6 +27,8 @@ python -m venv .venv
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers .venv/bin/playwright install chromium
 ```
 
+Playwright is pinned to version 1.56 because the current Yeratta laptop runs macOS 13. Newer Playwright browser bundles no longer support that operating-system target.
+
 Start the application:
 
 ```bash
