@@ -1,0 +1,3 @@
+{"case_id":"case-001","decision":"accept","critical_fields":{"passport_number":"P1234567","date_of_birth":"1990-01-02","passport_expiry":"2030-01-01","visa_number":"V98765"},"mrz_valid":true,"latency_ms":1850,"cost_inr":2.5}
+{"case_id":"case-002","decision":"correct","critical_fields":{"passport_number":"R7654321","date_of_birth":"1985-05-10","passport_expiry":"2029-11-30","visa_number":"E1234S"},"mrz_valid":true,"latency_ms":2100,"cost_inr":2.5}
+
