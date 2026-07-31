@@ -12,6 +12,8 @@ Open `preview.html` directly. No installation or server is required.
 
 The preview opens directly on the chronological case for the expired-session example, with the fake government login and CAPTCHA visible. Use the floating arrows to reach the other surfaces.
 
+The Outstanding Cases surface also keeps **Outstanding cases** and **Government site** tabs visible at every viewport width. Opening Government site selects the active session-renewal case when one exists, making the login and CAPTCHA immediately reachable.
+
 The route has three structurally different mobile-first surfaces, switchable with the floating control:
 
 - `?variant=A` — capture-first home and outstanding cases;
