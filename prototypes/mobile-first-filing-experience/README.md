@@ -10,6 +10,8 @@ This throwaway UI prototype contains fictional data and performs no OCR, documen
 
 Open `preview.html` directly. No installation or server is required.
 
+The preview opens directly on the chronological case for the expired-session example, with the fake government login and CAPTCHA visible. Use the floating arrows to reach the other surfaces.
+
 The route has three structurally different mobile-first surfaces, switchable with the floating control:
 
 - `?variant=A` — capture-first home and outstanding cases;
