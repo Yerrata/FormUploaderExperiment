@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yeratta Form C — minimal end-to-end demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18201c;
+      --muted: #68736d;
+      --line: #dce4df;
+      --paper: #fff;
+      --wash: #f2f6f3;
+      --green: #176b4d;
+      --green-soft: #e5f3eb;
+      --blue: #294f82;
+      --blue-soft: #e8eff8;
+      --amber: #93600c;
+      --amber-soft: #fff2d8;
+      --red: #963735;
+      --red-soft: #fce9e7;
+      --shadow: 0 18px 50px rgba(27,53,40,.10);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--wash); color: var(--ink); font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .topbar { min-height: 68px; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 13px 24px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); position: sticky; top: 0; z-index: 5; }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .mark { width: 39px; height: 39px; display: grid; place-items: center; border-radius: 11px; color: white; background: var(--green); font-weight: 900; }
+    .brand b, .brand span { display: block; }
+    .brand span { color: var(--muted); font-size: 12px; }
+    .top-actions { display: flex; align-items: center; gap: 9px; }
+    .fiction { padding: 7px 10px; border: 1px dashed #9aa69f; border-radius: 999px; color: var(--muted); font-size: 12px; }
+    .session { padding: 7px 10px; border-radius: 999px; color: var(--red); background: var(--red-soft); font-weight: 800; }
+    .session.ok { color: var(--green); background: var(--green-soft); }
+    .page { max-width: 1500px; margin: 0 auto; padding: 20px 24px 50px; }
+    .demo-note { display: flex; justify-content: space-between; gap: 18px; align-items: center; margin-bottom: 14px; padding: 11px 14px; border: 1px solid #d6c89f; border-radius: 12px; color: #665019; background: #fff8df; }
+    .demo-note b { white-space: nowrap; }
+    .timeline { display: grid; grid-template-columns: repeat(9,minmax(116px,1fr)); overflow-x: auto; margin-bottom: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 15px; background: white; }
+    .step { position: relative; min-width: 116px; padding-right: 10px; }
+    .step::before { content: ""; position: absolute; top: 14px; left: 28px; right: 0; height: 2px; background: var(--line); }
+    .step:last-child::before { display: none; }
+    .step i { position: relative; z-index: 1; width: 29px; height: 29px; display: grid; place-items: center; border: 2px solid var(--line); border-radius: 50%; color: var(--muted); background: white; font-style: normal; font-size: 11px; font-weight: 850; }
+    .step b { display: block; margin-top: 8px; font-size: 11px; }
+    .step small { display: block; color: var(--muted); font-size: 10px; }
+    .step.done i { border-color: var(--green); color: white; background: var(--green); }
+    .step.active i { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 0 5px var(--amber-soft); }
+    .main-grid { display: grid; grid-template-columns: 310px minmax(620px,1fr); gap: 14px; align-items: start; }
+    .stack { display: grid; gap: 14px; }
+    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); }
+    .panel-head { min-height: 52px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .panel-head h2, .panel-head h3 { margin: 0; font-size: 14px; }
+    .panel-body { padding: 14px; }
+    .date-select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; background: var(--wash); font-weight: 750; }
+    .case-list { display: grid; gap: 7px; }
+    .case { width: 100%; display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 9px; padding: 10px; border: 1px solid transparent; border-radius: 11px; text-align: left; background: white; }
+    .case:hover, .case.active { border-color: var(--line); background: var(--wash); }
+    .avatar { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: #e9edea; font-weight: 850; }
+    .case b, .case small { display: block; }
+    .case small { color: var(--muted); }
+    .badge { padding: 4px 7px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font-size: 10px; font-weight: 850; }
+    .badge.green { color: var(--green); background: var(--green-soft); }
+    .badge.amber { color: var(--amber); background: var(--amber-soft); }
+    .action-title { margin: 2px 0 4px; font-size: 24px; line-height: 1.15; }
+    .muted { color: var(--muted); }
+    .primary, .secondary { border-radius: 9px; padding: 10px 13px; font-weight: 800; }
+    .primary { border: 1px solid var(--green); color: white; background: var(--green); }
+    .primary:disabled { cursor: not-allowed; opacity: .45; }
+    .secondary { border: 1px solid var(--line); color: var(--ink); background: white; }
+    .button-row { display: flex; gap: 8px; margin-top: 13px; }
+    .boundary { margin-top: 12px; padding: 11px 12px; border-radius: 10px; color: #72540b; background: var(--amber-soft); }
+    .boundary b, .boundary span { display: block; }
+    .boundary span { font-size: 12px; }
+    .boundary.ok { color: #15533e; background: var(--green-soft); }
+    .log { max-height: 230px; overflow: auto; display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .log li { display: grid; grid-template-columns: 62px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid #edf0ee; }
+    .log time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
+    .empty { padding: 25px 12px; color: var(--muted); text-align: center; }
+    .portal-shell { border: 1px solid #bcc8d4; border-radius: 15px; background: #e9eef3; box-shadow: var(--shadow); }
+    .portal-label { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; color: white; background: #203957; border-radius: 14px 14px 0 0; }
+    .portal-label b { font-size: 12px; }
+    .portal-label span { color: #cbd7e5; font-size: 11px; }
+    iframe { width: 100%; height: 650px; display: block; border: 0; border-radius: 0 0 14px 14px; background: white; }
+    .evidence-grid { display: grid; grid-template-columns: minmax(280px,.8fr) 1.2fr; gap: 14px; }
+    .snapshot { min-height: 235px; display: grid; place-items: center; overflow: hidden; border: 1px dashed #b8c3bd; border-radius: 10px; color: var(--muted); background: #f4f6f5; }
+    .snapshot img { width: 100%; height: auto; display: block; }
+    .evidence { display: grid; align-content: start; }
+    .evidence > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .evidence span { color: var(--muted); }
+    .evidence b { overflow-wrap: anywhere; }
+    .download { display: inline-block; margin-top: 10px; color: var(--blue); font-weight: 800; }
+    @media (max-width: 1050px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .stack:first-child { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="mark">Y</div><div><b>Yeratta · Form C end-to-end demo</b><span>One human login, then unattended filing</span></div></div>
+    <div class="top-actions"><span class="fiction">Fictional data · fake portal</span><span id="sessionBadge" class="session">● Login required</span></div>
+  </header>
+  <main class="page">
+    <div class="demo-note"><b>Prototype boundary</b><span>The portal below is deliberately fake. The browser-worker sequence and evidence timing are real within this page; no government action occurs.</span></div>
+    <section id="timeline" class="timeline"></section>
+    <section class="main-grid">
+      <div class="stack">
+        <article class="panel">
+          <div class="panel-head"><h2>Outstanding cases</h2><select id="dateSelect" class="date-select" aria-label="Check-in date"></select></div>
+          <div id="caseList" class="panel-body case-list"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>Current action</h2><span id="caseBadge" class="badge">Ready</span></div>
+          <div class="panel-body">
+            <h1 id="actionTitle" class="action-title">Login to the portal once</h1>
+            <p id="caseSummary" class="muted"></p>
+            <div id="boundary" class="boundary"><b>Human action only at login</b><span>Complete the visible CAPTCHA inside the fake external portal. Automation never solves or bypasses it.</span></div>
+            <div class="button-row"><button id="runButton" class="primary" disabled>Run unattended filing</button><button id="departureButton" class="secondary" hidden>Reconcile departure</button><button id="resetButton" class="secondary">Reset demo</button></div>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><h2>Worker activity</h2><span class="muted">Visible audit trail</span></div>
+          <div class="panel-body"><ol id="activityLog" class="log"></ol></div>
+        </article>
+      </div>
+      <div class="stack">
+        <section class="portal-shell">
+          <div class="portal-label"><b>EXTERNAL SYSTEM · SIMULATION</b><span>Separate embedded document</span></div>
+          <iframe id="governmentPortal" title="Fake government Form C portal"></iframe>
+        </section>
+        <article class="panel">
+          <div class="panel-head"><h2>Evidence captured before submission</h2><span id="evidenceState" class="badge amber">Pending</span></div>
+          <div class="panel-body evidence-grid">
+            <div id="snapshot" class="snapshot">No pre-submit snapshot yet</div>
+            <div id="evidence" class="evidence">
+              <div><span>Evidence ID</span><b>Pending</b></div>
+              <div><span>Captured</span><b>Pending</b></div>
+              <div><span>Integrity</span><b>Pending</b></div>
+              <div><span>Submission</span><b>Not submitted</b></div>
+              <div><span>Acknowledgement</span><b>Pending</b></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+  <script>
+    const portalHtml = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  *{box-sizing:border-box}body{margin:0;color:#1b2735;background:#f6f2e9;font:13px/1.4 Arial,sans-serif}.gov-head{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;color:white;background:#243b5a}.gov-head b,.gov-head span{display:block}.gov-head span{color:#c9d5e3;font-size:11px}.seal{width:38px;height:38px;display:grid;place-items:center;border:1px solid #dbe4ed;border-radius:50%;font-weight:bold}.gov-brand{display:flex;align-items:center;gap:10px}.session{padding:5px 8px;border-radius:999px;color:#ffe0dd;background:#783c3b;font-size:11px;font-weight:bold}.session.ok{color:#d7f5e5;background:#246448}.body{padding:18px}.login{max-width:450px;margin:45px auto;padding:22px;border:1px solid #cec7b8;border-radius:8px;background:white;box-shadow:0 12px 30px rgba(30,40,50,.12)}h1{margin:0 0 5px;font-size:20px}p{color:#68727c}.captcha{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;padding:12px 16px;border:1px dashed #947640;background:#fff4ce;font:700 22px/1 Georgia,serif;letter-spacing:8px}.login input{width:100%;padding:10px;border:1px solid #b9c0c7;border-radius:4px;font:inherit}.login button,.submit{margin-top:10px;padding:9px 13px;border:0;border-radius:5px;color:white;background:#294f82;font-weight:bold}.error{min-height:18px;color:#9b302e}.form{display:none;max-width:900px;margin:0 auto;border:1px solid #c8c1b3;background:white}.form.visible{display:block}.form-title{display:flex;justify-content:space-between;padding:11px 13px;border-bottom:1px solid #d9d3c8;background:#efebe2}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}label span{display:block;margin-bottom:3px;color:#65707a;font-size:10px;text-transform:uppercase}input{width:100%;min-height:36px;padding:8px;border:1px solid #bdc5cc;border-radius:4px;background:#fff}.footer{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-top:1px solid #d9d3c8;background:#faf9f6}.submit{margin:0}.submit:disabled{opacity:.45}.notice{color:#65707a;font-size:11px}.ack{display:none;margin:14px;padding:14px;border:1px solid #a7c9b6;border-radius:6px;color:#14513c;background:#e8f4ed}.ack.visible{display:block}.departures{display:none;max-width:900px;margin:0 auto;padding:20px;border:1px solid #c8c1b3;background:white}.departures.visible{display:block}.departures table{width:100%;border-collapse:collapse}.departures th,.departures td{padding:10px;border-bottom:1px solid #dde2df;text-align:left}.departures th{color:#65707a;font-size:10px;text-transform:uppercase}
+</style></head><body>
+  <header class="gov-head"><div class="gov-brand"><div class="seal">भारत</div><div><b>Foreigner Registration Portal</b><span>Form C demonstration environment</span></div></div><div id="portalSession" class="session">Session expired</div></header>
+  <main class="body">
+    <section id="login" class="login"><h1>Authorised property login</h1><p>This simulates the only manual boundary. Enter the CAPTCHA shown below.</p><div class="captcha"><span>CAPTCHA</span><b>4261</b></div><input id="captchaInput" autocomplete="off" placeholder="Enter 4261"><button id="loginButton">Login once</button><div id="loginError" class="error"></div></section>
+    <section id="form" class="form"><div class="form-title"><b>Form C · Foreigner registration</b><span id="formState">Waiting for worker</span></div><div id="formGrid" class="grid"></div><div id="ack" class="ack"></div><div class="footer"><span class="notice" id="notice">No values entered</span><button id="submit" class="submit" disabled>Submit Form C</button></div></section>
+    <section id="departures" class="departures"><h1>Departures</h1><p>Acknowledgement lookup and departure reconciliation.</p><table><thead><tr><th>Acknowledgement</th><th>Guest</th><th>Status</th></tr></thead><tbody id="departureRows"></tbody></table></section>
+  </main>
+<script>
+  const labels={guest:'Full name',nationality:'Nationality',passport:'Passport number',visa:'Visa number',visaType:'Visa type',visaUntil:'Visa valid until',arrival:'Arrival / check-in',arrivedFrom:'Arrived from',destination:'Next destination',checkout:'Expected checkout',formB:'Physical Form B reference'};
+  let loggedIn=false,current=null,snapshotHash=null,lastAck=null;
+  const send=(type,payload={})=>parent.postMessage({source:'fake-government-portal',type,...payload},'*');
+  function showForm(){document.querySelector('#login').style.display='none';document.querySelector('#departures').classList.remove('visible');document.querySelector('#form').classList.add('visible');document.querySelector('#portalSession').textContent='Authenticated session';document.querySelector('#portalSession').classList.add('ok')}
+  document.querySelector('#loginButton').onclick=()=>{if(document.querySelector('#captchaInput').value.trim()!=='4261'){document.querySelector('#loginError').textContent='Incorrect CAPTCHA';return}loggedIn=true;showForm();send('logged_in')};
+  function renderFields(values={}){const grid=document.querySelector('#formGrid');grid.innerHTML='';Object.entries(labels).forEach(([key,label])=>{const field=document.createElement('label');const title=document.createElement('span');title.textContent=label;const input=document.createElement('input');input.dataset.key=key;input.value=values[key]||'';field.append(title,input);grid.append(field)})}
+  function values(){return Object.fromEntries([...document.querySelectorAll('#formGrid input')].map(input=>[input.dataset.key,input.value]))}
+  function validate(){const missing=Object.entries(values()).filter(([,value])=>!value.trim()).map(([key])=>labels[key]);document.querySelector('#formState').textContent=missing.length?'Validation failed':'Validated';document.querySelector('#notice').textContent=missing.length?'Missing: '+missing.join(', '):'All required fields validated';document.querySelector('#submit').disabled=true;return missing}
+  async function pngSnapshot(data){const width=900,height=620,canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');ctx.fillStyle='#f6f2e9';ctx.fillRect(0,0,width,height);ctx.fillStyle='#243b5a';ctx.fillRect(0,0,width,66);ctx.fillStyle='white';ctx.font='bold 20px Arial';ctx.fillText('Foreigner Registration Portal · Form C',24,30);ctx.font='12px Arial';ctx.fillText('PRE-SUBMISSION SNAPSHOT · NOT YET SUBMITTED',24,51);ctx.fillStyle='white';ctx.fillRect(22,86,width-44,height-110);ctx.strokeStyle='#c8c1b3';ctx.strokeRect(22,86,width-44,height-110);ctx.fillStyle='#1b2735';ctx.font='bold 16px Arial';ctx.fillText('Foreigner registration details',42,118);const entries=Object.entries(labels);entries.forEach(([key,label],i)=>{const col=i%2,row=Math.floor(i/2),x=42+col*410,y=150+row*70;ctx.fillStyle='#66717c';ctx.font='10px Arial';ctx.fillText(label.toUpperCase(),x,y);ctx.strokeStyle='#c0c7ce';ctx.strokeRect(x,y+8,370,36);ctx.fillStyle='#1b2735';ctx.font='bold 13px Arial';ctx.fillText(String(data[key]||''),x+9,y+31)});return canvas.toDataURL('image/png')}
+  async function hashEvidence(json,png){const bytes=new TextEncoder().encode(json+'\\n'+png);const digest=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,'0')).join('')}
+  window.addEventListener('message',async event=>{const message=event.data||{};if(message.source!=='filing-worker')return;if(message.type==='session_check'){send('session_state',{loggedIn});return}if(!loggedIn){send('session_required');return}if(message.type==='fill'){showForm();current=message.case;lastAck=null;snapshotHash=null;document.querySelector('#ack').classList.remove('visible');renderFields(current.fields);document.querySelector('#formState').textContent='Worker entering values';await new Promise(resolve=>setTimeout(resolve,450));send('form_filled');return}if(message.type==='validate'){const missing=validate();send('validated',{ok:missing.length===0,missing});return}if(message.type==='snapshot'){const data=values(),json=JSON.stringify({caseId:current.id,formB:current.fields.formB,fields:data},null,2),png=await pngSnapshot(data),hash=await hashEvidence(json,png);snapshotHash=hash;document.querySelector('#formState').textContent='Pre-submit evidence sealed';document.querySelector('#notice').textContent='Snapshot sealed · form remains unsubmitted';send('snapshot_captured',{json,png,hash,capturedAt:new Date().toLocaleString('en-IN'),evidenceId:'PRE-'+current.id+'-'+current.fields.formB.slice(-3)});return}if(message.type==='submit'){if(!snapshotHash){send('worker_error',{message:'Submission blocked: no sealed snapshot'});return}document.querySelector('#formState').textContent='Submitting';await new Promise(resolve=>setTimeout(resolve,650));lastAck='ANI-'+current.id.slice(-3)+'-'+String(Math.floor(1000+Math.random()*8999));const ack=document.querySelector('#ack');ack.textContent='Submission accepted · acknowledgement '+lastAck;ack.classList.add('visible');document.querySelector('#formState').textContent='Submitted';document.querySelector('#notice').textContent='Acknowledgement captured';send('submitted',{ack:lastAck});return}if(message.type==='reconcile'){document.querySelector('#form').classList.remove('visible');document.querySelector('#departures').classList.add('visible');document.querySelector('#departureRows').innerHTML='<tr><td>'+message.ack+'</td><td>'+message.guest+'</td><td>Departure matched</td></tr>';send('reconciled',{ack:message.ack});return}if(message.type==='reset_form'){current=null;snapshotHash=null;lastAck=null;showForm();renderFields();document.querySelector('#formState').textContent='Waiting for worker';document.querySelector('#notice').textContent='No values entered';document.querySelector('#ack').classList.remove('visible')}});
+  renderFields();send('ready',{loggedIn});
+<\/script></body></html>`;
+
+    const cases = [
+      { id:'YRT-043', guest:'Daniel Koh', initials:'DK', date:'2026-07-31', room:'Garden 02', source:'MakeMyTrip', status:'ready', progress:1, evidence:null, ack:null, fields:{guest:'Daniel Koh',nationality:'Singapore',passport:'E•••••884',visa:'E•••••772',visaType:'e-Tourist',visaUntil:'06 Sep 2026',arrival:'31 Jul 2026, 15:25',arrivedFrom:'Port Blair',destination:'Port Blair',checkout:'02 Aug 2026',formB:'B-2026-119'} },
+      { id:'YRT-040', guest:'Aiko Tanaka', initials:'AT', date:'2026-07-30', room:'Lagoon 06', source:'Booking.com', status:'ready', progress:1, evidence:null, ack:null, fields:{guest:'Aiko Tanaka',nationality:'Japan',passport:'TR••••144',visa:'JP••••533',visaType:'e-Tourist',visaUntil:'21 Nov 2026',arrival:'30 Jul 2026, 19:05',arrivedFrom:'Delhi',destination:'Chennai',checkout:'04 Aug 2026',formB:'B-2026-116'} }
+    ];
+    const initialCases = JSON.parse(JSON.stringify(cases));
+    const steps = ['Data ready','Session','Open form','Fill fields','Validate','Seal snapshot','Submit','Capture ack','Departures'];
+    let sessionReady = false;
+    let selectedDate = '2026-07-31';
+    let selectedId = 'YRT-043';
+    let running = false;
+    const waiters = new Map();
+    const portal = document.querySelector('#governmentPortal');
+    portal.srcdoc = portalHtml;
+
+    const activeCase = () => cases.find(item => item.id === selectedId) || cases.find(item => item.date === selectedDate && item.status !== 'closed');
+    const visibleCases = () => cases.filter(item => item.date === selectedDate && item.status !== 'closed');
+    const sendPortal = (type,payload={}) => portal.contentWindow.postMessage({source:'filing-worker',type,...payload},'*');
+    const waitFor = type => new Promise((resolve,reject) => { const timer=setTimeout(()=>{waiters.delete(type);reject(new Error('Portal did not respond to '+type))},5000); waiters.set(type,payload=>{clearTimeout(timer);resolve(payload)}) });
+    const requestPortal = (type,expected,payload={}) => { const response=waitFor(expected); sendPortal(type,payload); return response; };
+    const pause = milliseconds => new Promise(resolve => setTimeout(resolve,milliseconds));
+    const now = () => new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    function addLog(message){const item=activeCase();if(!item)return;item.logs=item.logs||[];item.logs.unshift({time:now(),message});renderLog()}
+    function statusLabel(item){return {ready:'Ready',running:'Filing',filed:'Filed',closed:'Reconciled'}[item.status]||item.status}
+    function actionTitle(item){if(!sessionReady)return 'Login to the portal once';if(item.status==='ready')return 'Ready for unattended filing';if(item.status==='running')return 'Worker is filing Form C';if(item.status==='filed')return 'Filing verified · departure pending';return 'Case fully reconciled'}
+
+    function renderDates(){const select=document.querySelector('#dateSelect');const dates=[...new Set(cases.map(item=>item.date))].sort();select.innerHTML=dates.map(date=>'<option value="'+date+'" '+(date===selectedDate?'selected':'')+'>'+new Date(date+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+'</option>').join('')}
+    function renderCases(){const list=document.querySelector('#caseList'),visible=visibleCases();list.innerHTML=visible.length?visible.map(item=>'<button class="case '+(item.id===selectedId?'active':'')+'" data-id="'+item.id+'"><span class="avatar">'+item.initials+'</span><span><b>'+item.guest+'</b><small>'+item.id+' · '+item.room+'</small></span><span class="badge '+(item.status==='filed'?'green':'')+'">'+statusLabel(item)+'</span></button>').join(''):'<div class="empty">No outstanding cases for this check-in date.</div>';list.querySelectorAll('[data-id]').forEach(button=>button.onclick=()=>{selectedId=button.dataset.id;render()})}
+    function renderTimeline(){const item=activeCase(),progress=item?Math.max(item.progress,sessionReady?3:2):0;document.querySelector('#timeline').innerHTML=steps.map((label,index)=>{const number=index+1,state=number<progress?'done':number===progress?'active':'';return '<div class="step '+state+'"><i>'+(number<progress?'✓':number)+'</i><b>'+label+'</b><small>'+(number<progress?'Complete':number===progress?'Current':'Waiting')+'</small></div>'}).join('')}
+    function renderLog(){const item=activeCase(),log=document.querySelector('#activityLog');log.innerHTML=item?.logs?.length?item.logs.map(entry=>'<li><time>'+entry.time+'</time><span>'+entry.message+'</span></li>').join(''):'<li><time>—</time><span>No worker activity yet.</span></li>'}
+    function renderEvidence(){const item=activeCase(),box=document.querySelector('#evidence'),snapshot=document.querySelector('#snapshot'),state=document.querySelector('#evidenceState');if(!item?.evidence){snapshot.innerHTML='No pre-submit snapshot yet';state.textContent='Pending';state.className='badge amber';box.innerHTML='<div><span>Evidence ID</span><b>Pending</b></div><div><span>Captured</span><b>Pending</b></div><div><span>Integrity</span><b>Pending</b></div><div><span>Submission</span><b>Not submitted</b></div><div><span>Acknowledgement</span><b>Pending</b></div>';return}snapshot.innerHTML='<img src="'+item.evidence.png+'" alt="Pre-submission Form C snapshot">';state.textContent='Sealed before submit';state.className='badge green';const jsonUrl='data:application/json;charset=utf-8,'+encodeURIComponent(item.evidence.json);box.innerHTML='<div><span>Evidence ID</span><b>'+item.evidence.evidenceId+'</b></div><div><span>Captured</span><b>'+item.evidence.capturedAt+'</b></div><div><span>Integrity</span><b>SHA-256 '+item.evidence.hash+'</b></div><div><span>Submission</span><b>'+(item.ack?'Matched sealed evidence':'Not submitted yet')+'</b></div><div><span>Acknowledgement</span><b>'+(item.ack||'Pending')+'</b></div><a class="download" download="'+item.evidence.evidenceId+'.json" href="'+jsonUrl+'">Download canonical JSON</a>'}
+    function render(){renderDates();renderCases();renderTimeline();renderLog();renderEvidence();const item=activeCase();document.querySelector('#sessionBadge').textContent=sessionReady?'● Authenticated session':'● Login required';document.querySelector('#sessionBadge').className='session '+(sessionReady?'ok':'');if(!item){document.querySelector('#actionTitle').textContent='No outstanding case';document.querySelector('#caseSummary').textContent='Select another check-in date.';document.querySelector('#runButton').disabled=true;return}document.querySelector('#actionTitle').textContent=actionTitle(item);document.querySelector('#caseSummary').textContent=item.guest+' · '+item.source+' · '+item.room+' · '+item.fields.formB;document.querySelector('#caseBadge').textContent=statusLabel(item);document.querySelector('#caseBadge').className='badge '+(item.status==='filed'?'green':item.status==='running'?'amber':'');const boundary=document.querySelector('#boundary');boundary.className='boundary '+(sessionReady?'ok':'');boundary.innerHTML=sessionReady?'<b>CAPTCHA boundary complete</b><span>The authorised portal session is reused. No further staff action is needed for this filing.</span>':'<b>Human action only at login</b><span>Complete the visible CAPTCHA inside the fake external portal. Automation never solves or bypasses it.</span>';document.querySelector('#runButton').disabled=!sessionReady||running||item.status!=='ready';document.querySelector('#runButton').textContent=running?'Worker running…':'Run unattended filing';document.querySelector('#departureButton').hidden=item.status!=='filed';}
+
+    window.addEventListener('message',event=>{const message=event.data||{};if(message.source!=='fake-government-portal')return;if(message.type==='ready'||message.type==='session_state'){sessionReady=Boolean(message.loggedIn);render()}if(message.type==='logged_in'){sessionReady=true;addLog('Human login and CAPTCHA completed once; persistent session is ready.');render()}if(message.type==='session_required'){sessionReady=false;addLog('Worker paused: portal session requires human renewal.');render()}const waiter=waiters.get(message.type);if(waiter){waiters.delete(message.type);waiter(message)}});
+
+    async function runFiling(){const item=activeCase();if(!item||!sessionReady||running)return;running=true;item.status='running';item.progress=3;addLog('Worker checked the persistent authenticated session.');render();try{addLog('Worker opened the external Form C page.');render();await requestPortal('fill','form_filled',{case:item});item.progress=4;addLog('All dummy JSON values were entered into the external form.');render();const validation=await requestPortal('validate','validated');if(!validation.ok)throw new Error('Required fields missing: '+validation.missing.join(', '));item.progress=5;addLog('Government-form validation passed.');render();const evidence=await requestPortal('snapshot','snapshot_captured');item.evidence=evidence;item.progress=6;addLog('Pre-submit PNG and canonical JSON were hashed and sealed. The form is still unsubmitted.');render();await pause(1200);item.progress=7;addLog('Worker submitted the exact sealed form values.');render();const submitted=await requestPortal('submit','submitted');item.ack=submitted.ack;item.status='filed';item.progress=9;addLog('Acknowledgement '+item.ack+' captured and linked to '+item.evidence.evidenceId+'.');render()}catch(error){item.status='ready';addLog('Worker stopped safely: '+error.message)}finally{running=false;render()}}
+    async function reconcile(){const item=activeCase();if(!item?.ack||running)return;running=true;addLog('Worker opened Departures and searched acknowledgement '+item.ack+'.');try{await requestPortal('reconcile','reconciled',{ack:item.ack,guest:item.guest});item.progress=10;addLog('Departure matched. Case removed from the outstanding queue.');item.status='closed';await pause(650)}finally{running=false;const next=visibleCases()[0];selectedId=next?.id||'';render()}}
+    function reset(){cases.splice(0,cases.length,...JSON.parse(JSON.stringify(initialCases)));selectedDate='2026-07-31';selectedId='YRT-043';running=false;sendPortal('reset_form');render()}
+    document.querySelector('#dateSelect').onchange=event=>{selectedDate=event.target.value;selectedId=visibleCases()[0]?.id||'';render()};
+    document.querySelector('#runButton').onclick=runFiling;
+    document.querySelector('#departureButton').onclick=reconcile;
+    document.querySelector('#resetButton').onclick=reset;
+    render();
+  </script>
+</body>
+</html>
