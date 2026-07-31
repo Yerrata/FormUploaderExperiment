@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from formc_app.portal_catalogue import (
     PortalCatalogueManager,
     catalogue_page_controls,
@@ -24,13 +26,17 @@ class FakeCatalogueLocator:
 
 
 class FakeCataloguePage:
-    def __init__(self, controls):
+    def __init__(self, controls, *, authenticated=True):
         self.url = "https://indianfrro.gov.in/frro/FormC/formc.jsp?t4g=secret"
         self.controls = controls
+        self.authenticated = authenticated
 
     def locator(self, selector: str):
         if 'input[type="password"]' in selector:
-            return FakeCatalogueLocator([])
+            return FakeCatalogueLocator(
+                [],
+                count_override=0 if self.authenticated else 1,
+            )
         if selector == "form input, form select, form textarea":
             return FakeCatalogueLocator(self.controls, count_override=12)
         return FakeCatalogueLocator(self.controls)
@@ -47,16 +53,20 @@ class FakeCatalogueContext:
     def __init__(self, page):
         self.pages = [page]
         self.closed = False
+        self.playwright_stopped = False
 
     def new_page(self):
         raise AssertionError("The persistent-profile page should be reused")
 
     def close(self):
+        if self.playwright_stopped:
+            raise RuntimeError("Event loop is closed")
         self.closed = True
 
 
 class FakePlaywrightContext:
     def __init__(self, browser_context):
+        self.browser_context = browser_context
         self.value = SimpleNamespace(
             chromium=SimpleNamespace(
                 launch_persistent_context=lambda **_kwargs: browser_context
@@ -67,6 +77,7 @@ class FakePlaywrightContext:
         return self.value
 
     def __exit__(self, *_args):
+        self.browser_context.playwright_stopped = True
         return None
 
 
@@ -182,3 +193,22 @@ def test_manager_requires_the_login_profile(tmp_path: Path):
         assert "formc-portal-login" in str(error)
     else:
         raise AssertionError("Catalogue should require an existing login profile")
+
+
+def test_expired_session_closes_browser_before_playwright_stops(
+    tmp_path: Path,
+    monkeypatch,
+):
+    (tmp_path / "portal-browser-profile").mkdir()
+    page = FakeCataloguePage(sample_controls(), authenticated=False)
+    browser_context = FakeCatalogueContext(page)
+    monkeypatch.setattr(
+        "formc_app.portal_catalogue.sync_playwright",
+        lambda: FakePlaywrightContext(browser_context),
+    )
+
+    with pytest.raises(RuntimeError, match="renew the portal session"):
+        PortalCatalogueManager(data_root=tmp_path).catalogue()
+
+    assert browser_context.closed
+    assert browser_context.playwright_stopped
