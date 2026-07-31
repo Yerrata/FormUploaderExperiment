@@ -10,6 +10,8 @@ The government portal simulation makes the CAPTCHA boundary explicit: automation
 
 The workspace shows outstanding cases—not only today's cases—filtered by a selectable check-in date.
 
+The chronological journey is the selected direction and is now the default view. Before any simulated submission, the worker captures a full-page portal image and canonical field JSON, records the timestamp and integrity hash, and seals that evidence. Submission remains a separate later step.
+
 For a direct, dependency-free preview, open `preview.html`. It contains the CSS and JavaScript inline so file-preview environments do not need to load sibling assets.
 
 ## One command
@@ -21,7 +23,7 @@ python -m http.server 8080 --directory prototypes/minimal-filing-experience
 Then open:
 
 - `http://localhost:8080/?variant=A` — action-first workspace
-- `http://localhost:8080/?variant=B` — chronological journey
+- `http://localhost:8080/?variant=B` — chronological journey (selected/default)
 - `http://localhost:8080/?variant=C` — exception-first board
 
 Use the floating arrow switcher or keyboard left/right arrows to compare variants. Select a check-in date and fictional case, then press the primary action repeatedly to move it through guest correction, validation, government-form entry, submission, acknowledgement, departure, and reconciliation states.
