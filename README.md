@@ -100,10 +100,13 @@ FORMC_PORTAL_URL='https://indianfrro.gov.in/frro/FormC/formc.jsp?...' \
 
 The browser profile is stored under `data/portal-browser-profile/` and should be accessible only to Yeratta's Filing Worker account. `data/portal-session.json` records readiness without saving the URL query or browser cookies.
 
-After the login helper reports `READY`, catalogue the live form structure:
+On the Yeratta portal, the authenticated state does not survive closing and reopening Chromium. Therefore, catalogue the live form structure in the same browser process as login:
 
 ```bash
-PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers .venv/bin/formc-portal-catalogue
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
+  .venv/bin/formc-portal-login --catalogue
 ```
 
-This command is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels and select options in the gitignored `data/portal-controls.json`; it excludes current field values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. That safe catalogue is used to create the explicit Candidate Form C mapping. Live submission remains disabled.
+Staff completes the normal login and CAPTCHA, then the catalogue runs immediately before that browser closes. The future Filing Worker will likewise remain alive from Portal Session Renewal through authorised processing; a worker restart requires renewal.
+
+The catalogue is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels and select options in the gitignored `data/portal-controls.json`; it excludes current field values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. That safe catalogue is used to create the explicit Candidate Form C mapping. Live submission remains disabled.

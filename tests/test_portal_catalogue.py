@@ -10,6 +10,7 @@ from formc_app.portal_catalogue import (
     PortalCatalogueManager,
     catalogue_page_controls,
     safe_controls,
+    save_page_catalogue,
 )
 
 
@@ -159,6 +160,16 @@ def test_catalogue_page_controls_only_evaluates_the_read_only_selector():
     controls = catalogue_page_controls(page)
 
     assert [control.name for control in controls] == ["surname", "nationality"]
+
+
+def test_save_page_catalogue_uses_the_existing_authenticated_page(tmp_path: Path):
+    page = FakeCataloguePage(sample_controls())
+
+    catalogue = save_page_catalogue(page, tmp_path / "portal-controls.json")
+
+    assert catalogue.control_count == 2
+    assert (tmp_path / "portal-controls.json").is_file()
+    assert "secret" not in (tmp_path / "portal-controls.json").read_text("utf-8")
 
 
 def test_manager_uses_existing_profile_and_writes_redacted_catalogue(
