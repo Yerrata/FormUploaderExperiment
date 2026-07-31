@@ -242,6 +242,12 @@ PURPOSE_OF_VISIT_CHOICE_CODES = {
     "tourism": "16",
 }
 NEXT_DESTINATION_SCOPE_CODES = {"india": "I", "outside_india": "O"}
+PROPERTY_CONFIG_PORTAL_CONTROLS = {
+    "reference_address": "applicant_refaddr",
+    "reference_state_code": "applicant_refstate",
+    "reference_district_code": "applicant_refstatedistr",
+    "reference_pin_code": "applicant_refpincode",
+}
 
 
 def mapping_by_candidate_field() -> dict[str, CandidatePortalMapping]:

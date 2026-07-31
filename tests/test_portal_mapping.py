@@ -10,6 +10,7 @@ from formc_app.portal_mapping import (
     LIVE_SUBMISSION_CONTROL_IDS,
     MappingStatus,
     NEXT_DESTINATION_SCOPE_CODES,
+    PROPERTY_CONFIG_PORTAL_CONTROLS,
     PURPOSE_OF_VISIT_CHOICE_CODES,
     SEX_CHOICE_CODES,
     mapping_by_candidate_field,
@@ -50,3 +51,12 @@ def test_live_radio_choice_codes_are_frozen_from_the_safe_catalogue():
     assert set(dict(SEX_CHOICES)) == set(SEX_CHOICE_CODES)
     assert set(dict(EMPLOYMENT_CHOICES)) == set(EMPLOYMENT_CHOICE_CODES)
     assert set(dict(PURPOSE_OF_VISIT_CHOICES)) == set(PURPOSE_OF_VISIT_CHOICE_CODES)
+
+
+def test_property_control_identifiers_are_frozen_from_the_safe_catalogue():
+    assert PROPERTY_CONFIG_PORTAL_CONTROLS == {
+        "reference_address": "applicant_refaddr",
+        "reference_state_code": "applicant_refstate",
+        "reference_district_code": "applicant_refstatedistr",
+        "reference_pin_code": "applicant_refpincode",
+    }

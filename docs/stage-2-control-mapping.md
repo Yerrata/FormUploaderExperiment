@@ -63,6 +63,17 @@ Visa subtype is portal-dependent and must be handled only when the chosen visa t
 
 The India reference address, state, district and PIN code come from one locked `data/property.json` on the Filing Worker. Guests do not type or alter the resort's own address. The application has no route that writes this configuration, and no real Yeratta values are committed to GitHub.
 
+The final 55-control catalogue freezes these exact mappings:
+
+| Property configuration field | Government control | Fill-plan rule |
+|---|---|---|
+| `reference_address` | `applicant_refaddr` | Fill locked text |
+| `reference_state_code` | `applicant_refstate` | Select the exact configured code after confirming it exists in the static catalogue |
+| `reference_district_code` | `applicant_refstatedistr` | State-dependent select; wait for its options, then require the exact configured code before selecting |
+| `reference_pin_code` | `applicant_refpincode` | Fill the validated six-digit PIN |
+
+The district catalogue is empty until a state is selected. The offline plan therefore marks that one operation `runtime_option_check_required`; a future executor must stop if the configured district code does not appear after selecting the state.
+
 ## Optional or operational controls
 
 - Indian and permanent-country phone/mobile numbers and remarks are not marked mandatory in the captured page.
@@ -83,7 +94,8 @@ The compiler:
 - verifies Candidate confirmation, readiness and the Filing Request hash;
 - formats confirmed dates and frozen choice codes deterministically;
 - resolves country and visa-type options only by one exact normalized catalogue label;
-- rejects missing, duplicate, disabled, read-only or structurally changed controls and options;
+- rejects missing, duplicate, disabled, read-only or structurally changed controls and static options;
+- requires an exact runtime option check for the state-dependent property district select;
 - excludes room metadata and both live submission controls;
 - keeps live filling and live submission explicitly disabled;
 - reports every unresolved semantic item above as a blocker rather than guessing.
