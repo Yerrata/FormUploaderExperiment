@@ -1,8 +1,8 @@
-# PROTOTYPE — minimal Form III filing experience
+# PROTOTYPE — minimal Form C filing experience
 
 ## Question
 
-Which desktop layout makes the complete Yeratta Resort filing workflow easiest to understand and operate when passport and visa extraction is temporarily replaced by deterministic dummy JSON?
+Which desktop layout makes the complete Yeratta Resort Form C filing workflow easiest to understand and operate when passport and visa extraction is temporarily replaced by deterministic dummy JSON?
 
 This is a throwaway, read-only usability prototype. It contains fictional data and simulates WhatsApp, extraction, an external government Form C, acknowledgements, session renewal, and departure updates. It performs no real external action.
 
