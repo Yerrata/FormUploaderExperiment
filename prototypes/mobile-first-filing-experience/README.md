@@ -1,35 +1,27 @@
-# PROTOTYPE — mobile-first Form C filing experience
+# PROTOTYPE — phone-only Form C filing experience
 
 ## Question
 
-Can a manager operate version 1 primarily from a phone while a separate resort laptop owns the persistent government session and unattended Filing Worker?
+Can a manager complete the full Form C workflow on one Android phone: capture documents, retain the government session, fill the form, review and submit it, capture the acknowledgement and reconcile Departures?
 
-This throwaway UI prototype contains fictional data and performs no OCR, document upload, WhatsApp action, government action, or real filing.
+This throwaway UI prototype contains fictional data and performs no OCR, document upload, government action or real filing.
 
 ## Open
 
 Open `preview.html` directly. No installation or server is required.
 
-The preview opens directly on Outstanding Cases. Tap **Government site** or **Laptop needs login** to open the expired-session example with the mock login and CAPTCHA visible. Use the floating arrows to reach the other surfaces.
+The preview opens on Outstanding Cases. Tap **Government login needed**, **Open login →** or **Government site** to open the expired-session example. Enter mock CAPTCHA `4261`.
 
-**Laptop needs login** has two large tap targets on Outstanding Cases: the persistent header status and an explicit **Open login →** alert. Both open the same mock CAPTCHA screen.
-
-The Outstanding Cases surface keeps **Outstanding cases** and **Government site** tabs visible at every viewport width. Every visible control has a working demo result: worker status, tabs, date filter, case rows, camera capture and reset. Opening Government site selects the active session-renewal case when one exists, making the login and CAPTCHA immediately reachable.
-
-The government pane is a local mock external website. Enter CAPTCHA `4261`, then use its action button to run the worker and seal pre-submit evidence. At that point the task pane can only open the filled government form: the manager must review it and click **I checked it — Submit Form C** on the government page. The prototype then captures the acknowledgement automatically. Departures lookup and reconciliation remain available from the government pane.
-
-In production, the live authenticated government browser remains on the filing laptop. The mobile application can request and report work, but it must not copy the login session or attempt to embed the government site. This prototype uses the right pane to represent the real-browser handoff.
-
-After the snapshot is sealed, **Pre-submit evidence sealed** becomes a link in the task timeline. Tapping it opens the government pane and shows the evidence ID, its pre-submission timing and the linked case.
-
-The route has three structurally different mobile-first surfaces, switchable with the floating control:
+The route has three mobile-first surfaces:
 
 - `?variant=A` — capture-first home and outstanding cases;
-- `?variant=B` — chronological two-pane case journey;
+- `?variant=B` — chronological case with Tasks and Government site tabs;
 - `?variant=C` — guided passport-and-visa camera capture.
 
-On a phone, the capture buttons use a file input with `capture="environment"`, allowing a supporting browser to open the rear camera. **Use demo photos** exercises the same state flow without selecting identity documents.
+Every operation is owned by the same phone. In production this implies a dedicated Android app with an in-app government browser: a normal web page cannot safely control a separately opened government page or retain its authenticated session. Login and CAPTCHA remain manual on the phone. After that, the app fills the government form locally, seals pre-submit evidence and opens the filled form for manager review.
 
-The phone is the Mobile Capture Client. The separate laptop is the Filing Worker and owns credentials, the persistent government session, pre-submit evidence capture, submission, acknowledgement retrieval and Departures reconciliation.
+The task pane cannot submit. It only opens the filled government form. The manager must review it and tap **I checked it — Submit Form C** on the government page. The app then captures the acknowledgement, links it to the pre-submit evidence and uses it for Departures reconciliation.
 
-The chronological case surface uses exactly two panes on laptop and tablet: automation tasks on the left and the changing government site on the right. On a phone, the same panes become **Tasks** and **Government site** tabs so the government form remains readable; starting a portal-affecting task automatically opens the government-site tab.
+After the snapshot is sealed, **Pre-submit evidence sealed** becomes a link in the task timeline. Tapping it opens the government page and shows the evidence ID, pre-submission timing and linked case.
+
+On a supporting phone browser, the capture input uses `capture="environment"` to open the rear camera. **Use demo photo** exercises the same prototype flow without selecting identity documents. Dummy JSON replaces passport extraction until the end-to-end usability is accepted.
