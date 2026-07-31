@@ -14,7 +14,9 @@ The preview opens directly on Outstanding Cases. Tap **Government site** or **La
 
 The Outstanding Cases surface keeps **Outstanding cases** and **Government site** tabs visible at every viewport width. Every visible control has a working demo result: worker status, tabs, date filter, case rows, camera capture and reset. Opening Government site selects the active session-renewal case when one exists, making the login and CAPTCHA immediately reachable.
 
-The government pane is a local mock external website. Enter CAPTCHA `4261`, then use its action button to run the worker, seal pre-submit evidence, submit, retrieve the acknowledgement, open Departures and reconcile the case. The same state changes can also be driven from the task pane, so both sides of the two-pane interaction can be tested.
+The government pane is a local mock external website. Enter CAPTCHA `4261`, then use its action button to run the worker and seal pre-submit evidence. At that point the task pane can only open the filled government form: the manager must review it and click **I checked it — Submit Form C** on the government page. The prototype then captures the acknowledgement automatically. Departures lookup and reconciliation remain available from the government pane.
+
+In production, the live authenticated government browser remains on the filing laptop. The mobile application can request and report work, but it must not copy the login session or attempt to embed the government site. This prototype uses the right pane to represent the real-browser handoff.
 
 After the snapshot is sealed, **Pre-submit evidence sealed** becomes a link in the task timeline. Tapping it opens the government pane and shows the evidence ID, its pre-submission timing and the linked case.
 
