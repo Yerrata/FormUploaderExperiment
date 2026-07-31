@@ -13,9 +13,11 @@ Open `preview.html` directly. No installation or server is required.
 The route has three structurally different mobile-first surfaces, switchable with the floating control:
 
 - `?variant=A` — capture-first home and outstanding cases;
-- `?variant=B` — chronological case journey;
+- `?variant=B` — chronological two-pane case journey;
 - `?variant=C` — guided passport-and-visa camera capture.
 
 On a phone, the capture buttons use a file input with `capture="environment"`, allowing a supporting browser to open the rear camera. **Use demo photos** exercises the same state flow without selecting identity documents.
 
 The phone is the Mobile Capture Client. The separate laptop is the Filing Worker and owns credentials, the persistent government session, pre-submit evidence capture, submission, acknowledgement retrieval and Departures reconciliation.
+
+The chronological case surface uses exactly two panes on laptop and tablet: automation tasks on the left and the changing government site on the right. On a phone, the same panes become **Tasks** and **Government site** tabs so the government form remains readable; starting a portal-affecting task automatically opens the government-site tab.
