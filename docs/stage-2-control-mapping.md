@@ -36,6 +36,11 @@ These live controls are marked with `*` by the government page but are not repre
 - employment-in-India choice and purpose of visit;
 - structured next destination.
 
+The safe live catalogue confirms these radio choice codes:
+
+- employed in India: `Y` for yes, `N` for no;
+- next destination: `I` for India, `O` for outside India.
+
 Visa subtype is portal-dependent and must be handled only when the chosen visa type makes its options available.
 
 ## Property configuration rather than guest questions
@@ -53,6 +58,6 @@ The India reference address, state, district and PIN code should come from one l
 
 `tmpsbmt` and `pmsbmt` are live submission-related controls. The adapter must not click either during mapping or fill-only development. Human-reviewed submission remains disabled until the filled live page has been manually checked and a separate explicit release gate is approved.
 
-## Remaining structural probe
+## Structural probe status
 
-The first catalogue deliberately excluded all input values. Radio-button values are static choice codes, not guest data, and are needed to distinguish the two employment and destination choices. The revised catalogue records a `choice_value` only for radio and checkbox controls while continuing to exclude values from text, file, hidden, password and button inputs.
+Complete. The final catalogue captured all 55 controls and the four safe radio choice codes. Values from text, file, hidden, password and button inputs remain excluded.

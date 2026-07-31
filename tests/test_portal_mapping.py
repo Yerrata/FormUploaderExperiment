@@ -1,8 +1,10 @@
 from formc_app.domain import REQUIRED_FIELD_NAMES
 from formc_app.portal_mapping import (
     CANDIDATE_PORTAL_MAPPINGS,
+    EMPLOYMENT_CHOICE_CODES,
     LIVE_SUBMISSION_CONTROL_IDS,
     MappingStatus,
+    NEXT_DESTINATION_SCOPE_CODES,
     mapping_by_candidate_field,
 )
 
@@ -31,3 +33,8 @@ def test_ambiguous_candidate_fields_fail_closed():
     assert mappings["next_destination"].status == MappingStatus.SCHEMA_CHANGE_REQUIRED
     assert mappings["check_out_date"].status == MappingStatus.DERIVED_UNCONFIRMED
     assert mappings["form_b_reference"].status == MappingStatus.UNCONFIRMED
+
+
+def test_live_radio_choice_codes_are_frozen_from_the_safe_catalogue():
+    assert EMPLOYMENT_CHOICE_CODES == {"yes": "Y", "no": "N"}
+    assert NEXT_DESTINATION_SCOPE_CODES == {"india": "I", "outside_india": "O"}
