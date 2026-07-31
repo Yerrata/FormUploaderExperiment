@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Outstanding cases · Yeratta{% endblock %}
+{% block shell_class %}wide-shell{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">Staff workspace</span><h1>Outstanding cases</h1><p>Cases are ordered by check-in time and remain visible until verified.</p></div>
+  <form method="get" class="date-filter">
+    <label for="check_in_date">Check-in date</label>
+    <select id="check_in_date" name="check_in_date" onchange="this.form.submit()">
+      {% if not available_dates %}<option value="{{ selected_date }}">{{ selected_date.strftime('%d %b %Y') }}</option>{% endif %}
+      {% for item_date in available_dates %}<option value="{{ item_date }}" {% if item_date == selected_date %}selected{% endif %}>{{ item_date.strftime('%d %b %Y') }}</option>{% endfor %}
+    </select>
+  </form>
+</section>
+
+<div class="dashboard-grid">
+  <section class="panel">
+    <div class="panel-head"><div><span class="eyebrow">{{ selected_date.strftime('%d %b %Y') }}</span><h2>Chronological queue</h2></div><span class="count">{{ cases|length }}</span></div>
+    <div class="case-list">
+      {% for item in cases %}
+      <a class="case-row" href="{{ request.url_for('case_detail', case_id=item.metadata.case_id) }}">
+        <span class="avatar">{{ (item.candidate.value('given_name')[:1] if item.candidate and item.candidate.value('given_name') else item.metadata.dummy_profile[:1])|upper }}</span>
+        <span class="case-copy"><b>{% if item.candidate %}{{ item.candidate.value('given_name') or '' }} {{ item.candidate.value('surname') or '' }}{% else %}New {{ item.metadata.dummy_profile|title }} case{% endif %}</b><small>{{ item.metadata.case_id }} · Room {{ item.metadata.room }}</small></span>
+        <span class="status status-{{ item.state.status.value|lower }}">{{ item.state.status.value.replace('_', ' ')|title }}</span>
+      </a>
+      {% else %}
+      <div class="empty"><b>No cases for this date</b><span>Start a Guest Session to create the first case.</span></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <details class="panel new-case" open>
+    <summary><span><span class="eyebrow">Stage 1</span><b>Start Guest Session</b></span><span>＋</span></summary>
+    <form method="post" action="{{ request.url_for('create_staff_case') }}" class="form-stack">
+      <label><span>Check-in date</span><input type="date" name="check_in_date" value="{{ selected_date }}" required></label>
+      <label><span>Expected checkout date</span><input type="date" name="check_out_date"></label>
+      <div class="form-pair">
+        <label><span>Room</span><input name="room" placeholder="Sea 04" required></label>
+        <label><span>Form B reference</span><input name="form_b_reference" placeholder="B-2026-118" required></label>
+      </div>
+      <label><span>Dummy passport profile</span><select name="dummy_profile">{% for profile in profiles %}<option value="{{ profile }}">{{ profile|title }}</option>{% endfor %}</select></label>
+      <div class="notice"><b>Extraction is intentionally fake.</b><span>The photographs are captured, but Stage 1 inserts deterministic test data so we can validate the rest of the workflow first.</span></div>
+      <button class="primary full" type="submit">Create secure guest link</button>
+    </form>
+  </details>
+</div>
+{% endblock %}

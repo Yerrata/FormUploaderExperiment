@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}One missing detail · Yeratta{% endblock %}
+{% block header_action %}<span class="secure-pill">One guest only</span>{% endblock %}
+{% block content %}
+<span class="eyebrow">Step 3 of 4</span>
+<div class="question-card">
+  <span class="question-number">1</span>
+  <h1>{{ field.question }}</h1>
+  <p>Only information required for Form C is requested.</p>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="field_name" value="{{ field.name }}">
+    {% if field.name == 'check_out_date' %}
+    <input class="answer-input" type="date" name="answer" autofocus required>
+    {% else %}
+    <input class="answer-input" name="answer" placeholder="Type your answer" autocomplete="off" autofocus required>
+    {% endif %}
+    <button class="primary full" type="submit">Continue</button>
+  </form>
+</div>
+{% endblock %}

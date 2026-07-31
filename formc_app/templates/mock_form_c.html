@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mock Form C</title><link rel="stylesheet" href="{{ request.url_for('static', path='mock-portal.css') }}"></head>
+<body>
+<header><div class="seal">भारत</div><div><b>Foreigner Registration Portal</b><small>Form C demonstration environment</small></div><span>Mock authenticated session</span></header>
+<main>
+  <div class="boundary"><b>EXTERNAL MOCK WEBSITE</b> This page represents the government boundary. It contains no real government data.</div>
+  {% if submission %}<section class="ack"><h1>Already submitted</h1><p data-acknowledgement="{{ submission.acknowledgement }}">Acknowledgement {{ submission.acknowledgement }}</p></section>{% else %}
+  <form method="post">
+    <div class="form-title"><b>Form C · Foreigner registration</b><span>{{ case_id }}</span></div>
+    {% if missing %}<div class="errors">Missing: {{ missing|join(', ') }}</div>{% endif %}
+    <div class="grid">{% for field in fields %}<label><span>{{ field.label }}</span><input name="{{ field.name }}" value="{{ values.get(field.name, '') if values else '' }}" required></label>{% endfor %}</div>
+    <footer><small>Worker must capture evidence before pressing submit.</small><button type="submit">Submit Form C</button></footer>
+  </form>{% endif %}
+</main></body></html>

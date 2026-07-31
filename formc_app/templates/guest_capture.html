@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Photograph documents · Yeratta{% endblock %}
+{% block header_action %}<span class="secure-pill">One guest only</span>{% endblock %}
+{% block content %}
+<span class="eyebrow">Step 1 of 4</span>
+<h1>Photograph your documents</h1>
+<p class="lead">We will use these photographs only to prepare your required government Form C particulars.</p>
+<form method="post" enctype="multipart/form-data" class="capture-form">
+  <label class="capture-card">
+    <span class="capture-icon">▣</span><span><b>Passport photograph page</b><small>Make every corner and all text visible.</small></span>
+    <input type="file" name="passport" accept="image/*,.pdf" capture="environment" required>
+  </label>
+  <label class="capture-card">
+    <span class="capture-icon">▤</span><span><b>Visa photograph</b><small>Photograph the complete visa or e-visa page.</small></span>
+    <input type="file" name="visa" accept="image/*,.pdf" capture="environment" required>
+  </label>
+  <div class="notice"><b>Stage 1 test mode</b><span>The app stores your photographs but uses known dummy JSON to test the filing workflow.</span></div>
+  <button class="primary full" type="submit">Read my documents</button>
+</form>
+{% endblock %}

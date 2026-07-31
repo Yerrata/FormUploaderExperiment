@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Information received · Yeratta{% endblock %}
+{% block header_action %}<span class="secure-pill">Complete</span>{% endblock %}
+{% block content %}
+<section class="completion">
+  <span class="completion-mark">✓</span>
+  <span class="eyebrow">Information received</span>
+  <h1>Your part is complete</h1>
+  <p>Yeratta has received one request to file Form C for this stay. You cannot use this link to create or file another case.</p>
+  <div class="notice"><b>Reference</b><span>{{ case.metadata.case_id }}</span></div>
+</section>
+{% endblock %}

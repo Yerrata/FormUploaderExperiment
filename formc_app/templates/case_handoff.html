@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Hand device to guest · Yeratta{% endblock %}
+{% block content %}
+<span class="eyebrow">Guest Session created</span>
+<h1>Hand this device to the guest</h1>
+<p class="lead">This secure link can update only {{ case.metadata.case_id }} and expires at {{ case.metadata.guest_token_expires_at.strftime('%H:%M UTC') }}.</p>
+<section class="hero-card">
+  <div class="hero-icon">↗</div>
+  <h2>Ready for passport and visa</h2>
+  <p>The guest cannot see other cases, the Filing Queue or the government portal.</p>
+  <a class="primary full button" href="{{ guest_url }}">Open guest wizard</a>
+</section>
+<div class="link-card"><span>WhatsApp or QR-ready link</span><code>{{ guest_url }}</code><button class="secondary full" type="button" onclick="navigator.clipboard.writeText('{{ guest_url }}');this.textContent='Copied'">Copy secure link</button></div>
+{% endblock %}
