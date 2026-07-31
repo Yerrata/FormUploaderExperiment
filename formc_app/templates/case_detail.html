@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ case.metadata.case_id }} · Yeratta{% endblock %}
+{% block shell_class %}wide-shell{% endblock %}
+{% block head %}{% if case.state.status.value in ['FILING', 'PRE_SUBMIT_EVIDENCE_SEALED'] %}<meta http-equiv="refresh" content="2">{% endif %}{% endblock %}
+{% block content %}
+<a class="back" href="{{ request.url_for('staff_dashboard') }}?check_in_date={{ case.metadata.check_in_date }}">← Outstanding cases</a>
+<section class="page-heading compact">
+  <div><span class="eyebrow">{{ case.metadata.case_id }}</span><h1>{% if case.candidate %}{{ case.candidate.value('given_name') or '' }} {{ case.candidate.value('surname') or '' }}{% else %}Guest Session{% endif %}</h1><p>Room {{ case.metadata.room }} · {{ case.metadata.check_in_date.strftime('%d %b %Y') }}</p></div>
+  <span class="status status-{{ case.state.status.value|lower }}">{{ case.state.status.value.replace('_', ' ')|title }}</span>
+</section>
+
+<div class="mobile-tabs"><button class="active" data-tab="task">Task</button><button data-tab="portal">Government site</button></div>
+<div class="two-pane">
+  <section class="task-pane active" data-pane="task">
+    <div class="panel">
+      <div class="panel-head"><div><span class="eyebrow">Current task</span><h2>{{ case.state.status_message }}</h2></div></div>
+      <div class="panel-body">
+        <ol class="timeline">
+          {% set steps = [('GUEST_CAPTURE','Photograph documents'),('GUEST_REVIEW','Review extracted particulars'),('NEEDS_ANSWERS','Answer missing questions'),('READY_FOR_FILING','Candidate ready'),('FILING','Worker fills mock portal'),('PRE_SUBMIT_EVIDENCE_SEALED','Evidence sealed'),('VERIFIED','Acknowledgement captured')] %}
+          {% for code, label in steps %}<li class="{% if case.state.status.value == code %}current{% endif %}"><span>{{ loop.index }}</span><b>{{ label }}</b></li>{% endfor %}
+        </ol>
+        {% if case.state.status == status.READY_FOR_FILING %}<form method="post" action="{{ request.url_for('run_case', case_id=case.metadata.case_id) }}"><button class="primary full" type="submit">Run mock filing worker</button></form>{% endif %}
+        {% if case.state.status == status.BLOCKED %}<form method="post" action="{{ request.url_for('retry_case', case_id=case.metadata.case_id) }}"><button class="secondary full" type="submit">Retry safe pre-submit failure</button></form>{% endif %}
+        {% if case.state.status == status.GUEST_CAPTURE %}<a class="primary full button" href="{{ request.url_for('case_handoff', case_id=case.metadata.case_id) }}">Open guest handoff</a>{% endif %}
+      </div>
+    </div>
+    {% if case.candidate %}<div class="panel"><div class="panel-head"><h2>Candidate Form C</h2></div><div class="candidate-grid compact-grid">{% for definition, field in fields %}<div><span>{{ definition.label }}</span><b>{{ field.value or 'Missing' }}</b><small>{{ field.source.replace('_', ' ')|title }}{% if field.original_value %} · was {{ field.original_value }}{% endif %}</small></div>{% endfor %}</div></div>{% endif %}
+  </section>
+
+  <section class="portal-pane" data-pane="portal">
+    <div class="browser-frame">
+      <div class="browser-bar"><i></i><i></i><i></i><span>mock-government.local/FormC/formc.jsp</span></div>
+      {% if case.evidence %}
+      <img class="portal-snapshot" src="{{ request.url_for('evidence_file', case_id=case.metadata.case_id, filename=case.evidence.screenshot_path.split('/')[-1]) }}" alt="Sealed pre-submit mock Form C">
+      {% else %}
+      <iframe title="Mock government Form C" src="{{ request.url_for('mock_form_c', case_id=case.metadata.case_id) }}"></iframe>
+      {% endif %}
+    </div>
+    <div class="evidence-panel">
+      <span class="eyebrow">Filing evidence</span>
+      {% if case.evidence %}
+      <h2>Pre-submit evidence sealed</h2>
+      <dl><div><dt>Attempt</dt><dd>{{ case.evidence.attempt }}</dd></div><div><dt>Integrity</dt><dd><code>{{ case.evidence.combined_sha256[:18] }}…</code></dd></div><div><dt>Acknowledgement</dt><dd>{{ case.evidence.acknowledgement or 'Pending' }}</dd></div></dl>
+      {% else %}<h2>Waiting for worker</h2><p>The right-hand pane will show the exact mock government form captured before submission.</p>{% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script>document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===button));document.querySelectorAll('[data-pane]').forEach(x=>x.classList.toggle('active',x.dataset.pane===button.dataset.tab))}))</script>{% endblock %}

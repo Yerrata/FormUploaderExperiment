@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Yeratta Form C{% endblock %}</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell {% block shell_class %}{% endblock %}">
+    <header class="topbar">
+      <a class="brand" href="{{ request.url_for('staff_dashboard') }}">
+        <span class="mark">Y</span>
+        <span><b>Yeratta Resort</b><small>Foreign guest filing</small></span>
+      </a>
+      {% block header_action %}<span class="worker-pill">Local system</span>{% endblock %}
+    </header>
+    <main class="page">{% block content %}{% endblock %}</main>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

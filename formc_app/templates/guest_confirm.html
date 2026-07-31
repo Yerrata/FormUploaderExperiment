@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Confirm Form C request · Yeratta{% endblock %}
+{% block header_action %}<span class="secure-pill">One guest only</span>{% endblock %}
+{% block content %}
+<span class="eyebrow">Step 4 of 4</span>
+<h1>Confirm your Form C information</h1>
+<p class="lead">Yeratta will use exactly these particulars to prepare one government filing.</p>
+<section class="candidate-grid">
+  {% for definition, field in fields %}
+  <div><span>{{ definition.label }}</span><b>{{ field.value or 'Missing' }}</b><small>{{ field.source.replace('_', ' ')|title }}</small></div>
+  {% endfor %}
+</section>
+{% if missing %}<div class="error-box">Submission blocked. Missing: {{ missing|join(', ') }}</div>{% endif %}
+<form method="post"><button class="primary full" type="submit" {% if missing %}disabled{% endif %}>Send one Form C filing request</button></form>
+{% endblock %}
