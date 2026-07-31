@@ -27,3 +27,7 @@ _Avoid_: A request sent to the portal, a successful click, or an HTTP success re
 **Critical Field**:
 A required guest identity, travel, or stay value whose incorrect value could misidentify the guest or make the filing materially incorrect.
 _Avoid_: A field accepted only because an extraction confidence threshold was exceeded
+
+**Supported Case**:
+A case with valid supported documents, complete or obtainable Guest Input, and an available government service. Excluded cases remain separately counted and classified rather than disappearing from performance reporting.
+_Avoid_: Any case removed after the system encounters difficulty
