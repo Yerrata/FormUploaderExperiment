@@ -98,4 +98,12 @@ FORMC_PORTAL_URL='https://indianfrro.gov.in/frro/FormC/formc.jsp?...' \
   .venv/bin/formc-portal-login
 ```
 
-The browser profile is stored under `data/portal-browser-profile/` and should be accessible only to Yeratta's Filing Worker account. `data/portal-session.json` records readiness without saving the URL query or browser cookies. The next Stage 2 slice will use this profile to catalogue and map live Form C controls, but live submission remains disabled.
+The browser profile is stored under `data/portal-browser-profile/` and should be accessible only to Yeratta's Filing Worker account. `data/portal-session.json` records readiness without saving the URL query or browser cookies.
+
+After the login helper reports `READY`, catalogue the live form structure:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers .venv/bin/formc-portal-catalogue
+```
+
+This command is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels and select options in the gitignored `data/portal-controls.json`; it excludes current field values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. That safe catalogue is used to create the explicit Candidate Form C mapping. Live submission remains disabled.
