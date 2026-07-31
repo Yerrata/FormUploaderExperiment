@@ -6,6 +6,8 @@ Which desktop layout makes the complete Yeratta Resort filing workflow easiest t
 
 This is a throwaway, read-only usability prototype. It contains fictional data and simulates WhatsApp, extraction, government submission, acknowledgements, session renewal, and departure updates. It performs no real external action.
 
+For a direct, dependency-free preview, open `preview.html`. It contains the CSS and JavaScript inline so file-preview environments do not need to load sibling assets.
+
 ## One command
 
 ```bash
@@ -19,4 +21,3 @@ Then open:
 - `http://localhost:8080/?variant=C` — exception-first board
 
 Use the floating arrow switcher or keyboard left/right arrows to compare variants. Select a fictional case and press **Simulate next step** to move it through guest correction, ready, submission, acknowledgement, departure, and reconciliation states.
-
