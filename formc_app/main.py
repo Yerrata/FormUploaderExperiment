@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from datetime import date
 from pathlib import Path
@@ -51,6 +52,22 @@ def _candidate_display(candidate: CandidateFormC | None):
         for field in FORM_FIELDS
         if field.name in candidate.fields
     ]
+
+
+def _validate_candidate_input(field_name: str, value: str) -> None:
+    definition = FIELD_BY_NAME[field_name]
+    allowed_values = {choice_value for choice_value, _ in definition.choices}
+    if allowed_values and value not in allowed_values:
+        raise ValueError(f"Choose a supported value for {definition.label}")
+    if definition.input_type == "date":
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(f"Enter a valid date for {definition.label}") from exc
+    if definition.input_type == "time" and not re.fullmatch(
+        r"(?:[01]\d|2[0-3]):[0-5]\d", value
+    ):
+        raise ValueError(f"Enter a valid 24-hour time for {definition.label}")
 
 
 def create_app(data_root: Path | None = None) -> FastAPI:
@@ -263,6 +280,10 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             new_value = str(form.get(name, "")).strip()
             if not new_value:
                 raise HTTPException(status_code=422, detail=f"{FIELD_BY_NAME[name].label} is required")
+            try:
+                _validate_candidate_input(name, new_value)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             current = candidate.fields[name]
             if new_value != current.value:
                 candidate.fields[name] = CandidateField(
@@ -311,6 +332,10 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         value = answer.strip()
         if not value:
             raise HTTPException(status_code=422, detail="An answer is required")
+        try:
+            _validate_candidate_input(field_name, value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         candidate.fields[field_name] = CandidateField(value=value, source="guest_answer")
         _store(request).save_candidate(candidate)
         return RedirectResponse(request.url_for("guest_question", token=token), status_code=303)

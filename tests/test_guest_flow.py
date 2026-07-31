@@ -5,7 +5,11 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from formc_app.domain import EXTRACTED_FIELD_NAMES, REQUIRED_FIELD_NAMES
+from formc_app.domain import (
+    EXTRACTED_FIELD_NAMES,
+    QUESTION_FIELD_NAMES,
+    REQUIRED_FIELD_NAMES,
+)
 from formc_app.main import create_app
 from formc_app.models import CaseStatus
 from formc_app.storage import CaseStore, InvalidGuestTokenError
@@ -25,6 +29,22 @@ def create_case(client: TestClient, app, *, profile: str = "daniel"):
     )
     assert response.status_code == 303
     return app.state.store.list_cases()[-1]
+
+
+GUEST_ANSWERS = {
+    "permanent_address": "12 Example Street",
+    "permanent_city": "Singapore",
+    "permanent_country": "Singapore",
+    "arrived_from_country": "India",
+    "arrived_from_city": "Port Blair",
+    "arrived_from_place": "Veer Savarkar Airport",
+    "arrival_date_india": "2026-07-30",
+    "arrival_time_hotel": "14:25",
+    "employed_in_india": "no",
+    "purpose_of_visit": "tourism",
+    "next_destination": "Neil Island",
+    "check_out_date": "2026-08-03",
+}
 
 
 def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path):
@@ -54,17 +74,16 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
 
     first_question = client.get(f"/guest/{token}/question")
     assert first_question.status_code == 200
-    assert "arrive from" in first_question.text.lower()
-    assert client.post(
-        f"/guest/{token}/question",
-        data={"field_name": "arrived_from", "answer": "Port Blair"},
-    ).status_code == 303
-    second_question = client.get(f"/guest/{token}/question")
-    assert "after leaving" in second_question.text.lower()
-    assert client.post(
-        f"/guest/{token}/question",
-        data={"field_name": "next_destination", "answer": "Neil Island"},
-    ).status_code == 303
+    assert "permanently reside" in first_question.text.lower()
+    for field_name in QUESTION_FIELD_NAMES:
+        current = app.state.store.load_candidate(created.metadata.case_id)
+        assert current is not None
+        if current.value(field_name):
+            continue
+        assert client.post(
+            f"/guest/{token}/question",
+            data={"field_name": field_name, "answer": GUEST_ANSWERS[field_name]},
+        ).status_code == 303
 
     confirm = client.get(f"/guest/{token}/confirm")
     assert confirm.status_code == 200
@@ -81,6 +100,37 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert (tmp_path / "cases" / created.metadata.case_id / "documents" / "passport.jpg").read_bytes() == b"passport-photo"
     assert client.get(f"/guest/{token}/done").status_code == 200
     assert client.get(f"/guest/{token}/review").status_code == 403
+
+
+def test_closed_guest_choice_rejects_an_unknown_value(tmp_path: Path):
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files={
+            "passport": ("passport.jpg", b"passport", "image/jpeg"),
+            "visa": ("visa.jpg", b"visa", "image/jpeg"),
+        },
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    review_values = {name: candidate.value(name) for name in EXTRACTED_FIELD_NAMES}
+    assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
+
+    response = client.post(
+        f"/guest/{token}/question",
+        data={"field_name": "employed_in_india", "answer": "sometimes"},
+    )
+
+    assert response.status_code == 422
+
+    invalid_time = client.post(
+        f"/guest/{token}/question",
+        data={"field_name": "arrival_time_hotel", "answer": "25:90"},
+    )
+    assert invalid_time.status_code == 422
 
 
 def test_missing_document_and_missing_answer_block_progress(tmp_path: Path):

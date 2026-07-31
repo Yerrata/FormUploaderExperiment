@@ -9,10 +9,15 @@
   <p>Only information required for Form C is requested.</p>
   <form method="post" class="form-stack">
     <input type="hidden" name="field_name" value="{{ field.name }}">
-    {% if field.name == 'check_out_date' %}
-    <input class="answer-input" type="date" name="answer" autofocus required>
+    {% if field.choices %}
+    <select class="answer-input" name="answer" autofocus required>
+      <option value="">Choose one</option>
+      {% for value, label in field.choices %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
     {% else %}
-    <input class="answer-input" name="answer" placeholder="Type your answer" autocomplete="off" autofocus required>
+    <input class="answer-input" type="{{ field.input_type }}" name="answer" placeholder="Type your answer" autocomplete="off" autofocus required>
     {% endif %}
     <button class="primary full" type="submit">Continue</button>
   </form>
