@@ -31,3 +31,7 @@ _Avoid_: A field accepted only because an extraction confidence threshold was ex
 **Supported Case**:
 A case with valid supported documents, complete or obtainable Guest Input, and an available government service. Excluded cases remain separately counted and classified rather than disappearing from performance reporting.
 _Avoid_: Any case removed after the system encounters difficulty
+
+**Evidence Package**:
+The tamper-evident history that connects source information, submitted values, submission attempts, and Filing Evidence for one guest stay.
+_Avoid_: A receipt stored without the values and events it is meant to prove
