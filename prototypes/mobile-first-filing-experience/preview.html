@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Yeratta Form C — mobile-first prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17221c;
+      --muted: #6a756f;
+      --line: #dce4df;
+      --paper: #fff;
+      --wash: #f3f7f4;
+      --green: #166b4c;
+      --green-dark: #0d533a;
+      --green-soft: #e5f4eb;
+      --blue: #315f91;
+      --blue-soft: #e8f0f8;
+      --amber: #95600b;
+      --amber-soft: #fff2d8;
+      --red: #963735;
+      --red-soft: #fce9e7;
+      --shadow: 0 18px 50px rgba(28,54,41,.13);
+    }
+    * { box-sizing: border-box; }
+    html { background: #dce7e0; }
+    body { margin: 0; color: var(--ink); background: #dce7e0; font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app-shell { width: 100%; max-width: 520px; min-height: 100vh; margin: 0 auto; padding-bottom: 92px; background: var(--wash); box-shadow: 0 0 60px rgba(27,48,37,.12); }
+    .topbar { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: max(12px,env(safe-area-inset-top)) 16px 10px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); position: sticky; top: 0; z-index: 8; backdrop-filter: blur(12px); }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; color: white; background: var(--green); font-weight: 900; }
+    .brand b, .brand small { display: block; }
+    .brand small { color: var(--muted); }
+    .worker-pill { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 999px; color: var(--green); background: var(--green-soft); font-size: 11px; font-weight: 800; }
+    .worker-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .worker-pill.warning { color: var(--red); background: var(--red-soft); }
+    .page { padding: 15px 14px 24px; }
+    .eyebrow { color: var(--green); font-size: 11px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 5px 0 7px; font-size: 27px; line-height: 1.12; letter-spacing: -.03em; }
+    h2, h3 { margin: 0; }
+    p { margin: 0; }
+    .muted { color: var(--muted); }
+    .capture-hero { overflow: hidden; margin-top: 16px; border-radius: 18px; color: white; background: linear-gradient(145deg,#126447,#0b4833); box-shadow: var(--shadow); }
+    .capture-hero-body { padding: 19px; }
+    .capture-hero h2 { margin: 5px 0 7px; font-size: 24px; line-height: 1.15; }
+    .capture-hero p { color: #cce3d8; }
+    .capture-action { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 17px; padding: 13px 14px; border: 0; border-radius: 12px; color: var(--green-dark); background: white; font-weight: 850; text-align: left; }
+    .capture-action span:last-child { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--green); font-size: 18px; }
+    .hero-foot { display: grid; grid-template-columns: repeat(3,1fr); border-top: 1px solid rgba(255,255,255,.15); background: rgba(0,0,0,.08); }
+    .hero-foot div { padding: 10px 11px; border-right: 1px solid rgba(255,255,255,.12); }
+    .hero-foot div:last-child { border-right: 0; }
+    .hero-foot b, .hero-foot span { display: block; }
+    .hero-foot b { font-size: 16px; }
+    .hero-foot span { color: #bcd5ca; font-size: 9px; text-transform: uppercase; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 20px 2px 10px; }
+    .section-head h2 { font-size: 16px; }
+    .date-select { min-height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 7px 8px; color: var(--ink); background: white; font-weight: 750; }
+    .case-list { display: grid; gap: 9px; }
+    .case-card { width: 100%; display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: white; text-align: left; }
+    .avatar { width: 41px; height: 41px; display: grid; place-items: center; border-radius: 50%; background: #e9eee9; font-weight: 850; }
+    .case-card b, .case-card small { display: block; }
+    .case-card small { color: var(--muted); }
+    .status { padding: 5px 8px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font-size: 10px; font-weight: 850; white-space: nowrap; }
+    .status.amber { color: var(--amber); background: var(--amber-soft); }
+    .status.red { color: var(--red); background: var(--red-soft); }
+    .status.green { color: var(--green); background: var(--green-soft); }
+    .device-boundary { display: grid; grid-template-columns: 38px 1fr; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid #cfdad4; border-radius: 13px; background: white; }
+    .device-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; color: var(--blue); background: var(--blue-soft); font-size: 18px; font-weight: 900; }
+    .device-boundary b, .device-boundary span { display: block; }
+    .device-boundary span { color: var(--muted); font-size: 12px; }
+    .back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 0; border: 0; color: var(--green); background: transparent; font-weight: 800; }
+    .case-identity { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 13px; }
+    .case-identity h1 { margin-bottom: 3px; }
+    .case-summary { padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+    .case-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .case-summary-grid span, .case-summary-grid b { display: block; }
+    .case-summary-grid span { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    .journey { display: grid; margin-top: 13px; padding: 4px 13px; border: 1px solid var(--line); border-radius: 15px; background: white; }
+    .journey-step { position: relative; display: grid; grid-template-columns: 34px 1fr; gap: 10px; min-height: 70px; padding: 13px 0; border-bottom: 1px solid #edf1ee; }
+    .journey-step:last-child { border-bottom: 0; }
+    .journey-step::before { content: ""; position: absolute; top: 42px; bottom: -15px; left: 14px; width: 2px; background: var(--line); }
+    .journey-step:last-child::before { display: none; }
+    .step-mark { position: relative; z-index: 1; width: 29px; height: 29px; display: grid; place-items: center; border: 2px solid var(--line); border-radius: 50%; color: var(--muted); background: white; font-size: 11px; font-weight: 850; }
+    .journey-step.done .step-mark { border-color: var(--green); color: white; background: var(--green); }
+    .journey-step.current .step-mark { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 0 5px var(--amber-soft); }
+    .journey-step h3 { font-size: 14px; }
+    .journey-step p { margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .primary, .secondary { min-height: 46px; border-radius: 12px; padding: 11px 14px; font-weight: 850; }
+    .primary { border: 1px solid var(--green); color: white; background: var(--green); }
+    .secondary { border: 1px solid var(--line); color: var(--ink); background: white; }
+    .full { width: 100%; }
+    .sticky-action { position: sticky; bottom: 10px; z-index: 4; margin-top: 13px; padding: 8px; border-radius: 15px; background: rgba(255,255,255,.91); box-shadow: 0 10px 30px rgba(20,40,30,.16); backdrop-filter: blur(10px); }
+    .evidence-card { margin-top: 12px; padding: 13px; border: 1px solid #afd1bd; border-radius: 14px; background: var(--green-soft); }
+    .evidence-card b, .evidence-card span { display: block; }
+    .evidence-card span { color: #3b6a57; font-size: 12px; }
+    .capture-page { min-height: calc(100vh - 90px); display: grid; grid-template-rows: auto 1fr auto; }
+    .capture-progress { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin: 12px 0 17px; }
+    .capture-progress span { height: 4px; border-radius: 99px; background: var(--line); }
+    .capture-progress span.on { background: var(--green); }
+    .camera-stage { min-height: 390px; display: grid; place-items: center; padding: 20px; border-radius: 20px; color: white; background: #16231c; text-align: center; }
+    .camera-frame { width: 100%; max-width: 330px; aspect-ratio: 1.55; display: grid; place-items: center; border: 2px solid rgba(255,255,255,.7); border-radius: 16px; position: relative; }
+    .camera-frame::before, .camera-frame::after { content: ""; position: absolute; width: 28px; height: 28px; border-color: #7be3b6; }
+    .camera-frame::before { left: -2px; top: -2px; border-left: 4px solid #7be3b6; border-top: 4px solid #7be3b6; border-radius: 14px 0 0; }
+    .camera-frame::after { right: -2px; bottom: -2px; border-right: 4px solid #7be3b6; border-bottom: 4px solid #7be3b6; border-radius: 0 0 14px; }
+    .camera-frame b, .camera-frame span { display: block; }
+    .camera-frame span { margin-top: 5px; color: #b9ccc3; font-size: 12px; }
+    .camera-controls { display: grid; gap: 8px; margin-top: 13px; }
+    .camera-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+    .review-card { width: 100%; text-align: left; }
+    .review-card h2 { margin-bottom: 10px; color: white; }
+    .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .review-grid div { padding: 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; background: rgba(255,255,255,.08); }
+    .review-grid span, .review-grid b { display: block; }
+    .review-grid span { color: #aebfb7; font-size: 9px; text-transform: uppercase; }
+    .capture-safe { margin-top: 10px; color: #9bb2a7; font-size: 11px; }
+    .prototype-switcher { position: fixed; z-index: 20; left: 50%; bottom: max(12px,env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 9px; padding: 7px; border-radius: 999px; color: white; background: #101713; box-shadow: var(--shadow); }
+    .prototype-switcher button { width: 36px; height: 36px; border: 0; border-radius: 50%; color: white; background: rgba(255,255,255,.12); font-size: 17px; }
+    .variant-name { min-width: 165px; text-align: center; font-size: 11px; font-weight: 800; }
+    @media (min-width: 900px) {
+      .app-shell { max-width: 1180px; }
+      .page { padding: 24px 28px 40px; }
+      .home-desktop { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; align-items: start; }
+      .capture-hero { margin-top: 0; }
+      .journey-layout { display: grid; grid-template-columns: .8fr 1.2fr; gap: 18px; align-items: start; }
+      .journey { margin-top: 0; }
+      .capture-layout { display: grid; grid-template-columns: .8fr 1.2fr; gap: 18px; align-items: start; }
+      .camera-stage { min-height: 600px; }
+      h1 { font-size: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const variants={A:'Capture-first home',B:'Chronological case',C:'Guided camera capture'};
+    const initialCases=[
+      {id:'YRT-043',guest:'Daniel Koh',initials:'DK',date:'2026-07-31',room:'Garden 02',source:'MakeMyTrip',status:'ready',progress:3,passport:true,visa:true,ack:null,evidence:null},
+      {id:'YRT-042',guest:'Elena Markovic',initials:'EM',date:'2026-07-31',room:'Sea 04',source:'Booking.com',status:'needs_answer',progress:2,passport:true,visa:true,ack:null,evidence:null},
+      {id:'YRT-044',guest:'Marta Silva',initials:'MS',date:'2026-07-31',room:'Palm 01',source:'Walk-in',status:'session',progress:3,passport:true,visa:true,ack:null,evidence:null},
+      {id:'YRT-040',guest:'Aiko Tanaka',initials:'AT',date:'2026-07-30',room:'Lagoon 06',source:'Booking.com',status:'filed',progress:7,passport:true,visa:true,ack:'ANI-040-3712',evidence:'PRE-YRT-040-116'}
+    ];
+    let cases=structuredClone(initialCases),selectedDate='2026-07-31',selectedId='YRT-043',captureStep=1,captureData={passport:false,visa:false};
+    const stages=['Documents captured','Required details complete','Laptop worker filing','Pre-submit evidence sealed','Submit Form C','Acknowledgement captured','Departure reconciled'];
+    function variant(){const value=new URLSearchParams(location.search).get('variant')?.toUpperCase();return variants[value]?value:'A'}
+    function setVariant(value){const url=new URL(location.href);url.searchParams.set('variant',value);history.replaceState({},'',url);render()}
+    function cycle(direction){const keys=Object.keys(variants),index=keys.indexOf(variant());setVariant(keys[(index+direction+keys.length)%keys.length])}
+    function selected(){return cases.find(item=>item.id===selectedId)||cases[0]}
+    function visible(){return cases.filter(item=>item.date===selectedDate&&item.status!=='closed')}
+    function statusMeta(status){return {ready:['Ready',''],needs_answer:['Needs answer','amber'],session:['Laptop login','red'],filing:['Filling form','amber'],snapshot:['Evidence sealed','green'],submitting:['Submitted','amber'],filed:['Filed','green'],departure:['Departure due','amber'],closed:['Complete','green']}[status]||[status,'']}
+    function formatDate(date){return new Date(date+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
+    function icon(label){return `<span class="device-icon">${label}</span>`}
+    function header(){const renewal=cases.some(item=>item.status==='session');return `<header class="topbar"><div class="brand"><div class="mark">Y</div><div><b>Yeratta Filing</b><small>Mobile Capture Client</small></div></div><span class="worker-pill ${renewal?'warning':''}">${renewal?'Laptop needs login':'Laptop worker online'}</span></header>`}
+    function switcher(){const key=variant();return `<nav class="prototype-switcher"><button data-cycle="-1" aria-label="Previous surface">←</button><div class="variant-name">${key} · ${variants[key]}</div><button data-cycle="1" aria-label="Next surface">→</button></nav>`}
+    function caseCards(){return visible().map(item=>{const [label,tone]=statusMeta(item.status);return `<button class="case-card" data-case="${item.id}"><span class="avatar">${item.initials}</span><span><b>${item.guest}</b><small>${item.id} · ${item.room} · ${item.source}</small></span><span class="status ${tone}">${label}</span></button>`}).join('')||`<div class="device-boundary">${icon('✓')}<div><b>No outstanding cases</b><span>All cases for ${formatDate(selectedDate)} are reconciled.</span></div></div>`}
+    function dateSelect(){const dates=[...new Set(initialCases.map(item=>item.date))].sort();return `<select class="date-select" data-date>${dates.map(date=>`<option value="${date}" ${date===selectedDate?'selected':''}>${formatDate(date)}</option>`).join('')}</select>`}
+    function home(){return `<main class="page"><div class="home-desktop"><section><span class="eyebrow">Fast foreign-guest check-in</span><h1>Photograph documents.<br>The system handles the filing.</h1><p class="muted">Use the manager's phone at reception. The separate laptop completes government work in the background.</p><article class="capture-hero"><div class="capture-hero-body"><span class="eyebrow" style="color:#96dbbc">New check-in</span><h2>Passport and visa photos</h2><p>Create a candidate filing immediately. Extraction is dummy JSON in this prototype.</p><button class="capture-action" data-open-capture><span>Open guided camera</span><span>›</span></button></div><div class="hero-foot"><div><b>2</b><span>photos</span></div><div><b>1–2 min</b><span>staff time</span></div><div><b>Auto</b><span>filing</span></div></div></article><div class="device-boundary">${icon('P')}<div><b>Phone captures and controls</b><span>No government password or portal session is stored on this phone.</span></div></div></section><section><div class="section-head"><h2>Outstanding cases</h2>${dateSelect()}</div><div class="case-list">${caseCards()}</div><div class="device-boundary">${icon('L')}<div><b>Separate laptop files unattended</b><span>It owns the encrypted browser profile, snapshot, submission and acknowledgement.</span></div></div></section></div></main>`}
+    function currentText(item){return {needs_answer:'One guest answer is missing',ready:'Ready for the laptop worker',session:'Portal session renewal needed',filing:'Government form is being filled',snapshot:'Evidence sealed; form not submitted',submitting:'Form submitted; acknowledgement pending',filed:'Acknowledgement captured',departure:'Departure reconciliation due',closed:'Case complete'}[item.status]}
+    function journey(){const item=selected(),[label,tone]=statusMeta(item.status);return `<main class="page"><button class="back" data-home>← Outstanding cases</button><div class="case-identity"><div><span class="eyebrow">${item.id} · ${item.room}</span><h1>${item.guest}</h1><p class="muted">${item.source} · Check-in ${formatDate(item.date)}</p></div><span class="status ${tone}">${label}</span></div><div class="journey-layout"><section><article class="case-summary"><h2 style="font-size:17px;margin-bottom:11px">${currentText(item)}</h2><div class="case-summary-grid"><div><span>Passport</span><b>${item.passport?'Captured':'Missing'}</b></div><div><span>Visa</span><b>${item.visa?'Captured':'Missing'}</b></div><div><span>Physical Form B</span><b>B-2026-${item.id.slice(-3)}</b></div><div><span>Worker</span><b>${item.status==='session'?'Paused safely':'Laptop connected'}</b></div></div></article>${item.status==='session'?`<div class="device-boundary" style="border-color:#edc0bc;background:var(--red-soft)">${icon('!')}<div><b>Go to the separate filing laptop</b><span>Login and CAPTCHA happen there only. The phone cannot renew or copy the government session.</span></div></div>`:''}${item.evidence?`<div class="evidence-card"><b>Pre-submit evidence sealed</b><span>${item.evidence} · PNG + JSON + SHA-256</span></div>`:''}${item.ack?`<div class="evidence-card"><b>Government acknowledgement</b><span>${item.ack} · linked to sealed evidence</span></div>`:''}</section><section class="journey">${stages.map((stage,index)=>{const number=index+1,state=number<item.progress?'done':number===item.progress?'current':'';return `<div class="journey-step ${state}"><span class="step-mark">${number<item.progress?'✓':number}</span><div><h3>${stage}</h3><p>${number<item.progress?'Complete':number===item.progress?currentText(item):'Waiting'}</p></div></div>`}).join('')}</section></div><div class="sticky-action"><button class="primary full" data-advance>${item.status==='session'?'Simulate laptop login renewal':item.status==='needs_answer'?'Simulate guest answer':item.status==='ready'?'Start unattended filing':item.status==='filing'?'Seal pre-submit evidence':item.status==='snapshot'?'Submit sealed Form C':item.status==='submitting'?'Capture acknowledgement':item.status==='filed'?'Mark departure due':item.status==='departure'?'Reconcile departure':'Reset case'}</button></div></main>`}
+    function capture(){const title=captureStep===1?'Photograph passport bio page':captureStep===2?'Photograph Indian visa':'Candidate filing ready';const help=captureStep===1?'Place the full passport page inside the frame.':captureStep===2?'Capture the visa or e-Visa page clearly.':'Dummy extraction JSON is ready for workflow testing.';return `<main class="page capture-page"><section><button class="back" data-home>← Cancel capture</button><span class="eyebrow">New check-in · Step ${captureStep} of 3</span><h1>${title}</h1><p class="muted">${help}</p><div class="capture-progress">${[1,2,3].map(step=>`<span class="${step<=captureStep?'on':''}"></span>`).join('')}</div></section><div class="capture-layout"><section class="camera-stage">${captureStep<3?`<div><div class="camera-frame"><div><b>${captureStep===1?'Passport bio page':'Visa page'}</b><span>Keep all corners visible and avoid glare</span></div></div><p class="capture-safe">Photos are simulated in this prototype and are not uploaded.</p></div>`:`<div class="review-card"><h2>Candidate Form C values</h2><div class="review-grid"><div><span>Guest</span><b>Sofia Petrov</b></div><div><span>Nationality</span><b>Bulgaria</b></div><div><span>Passport</span><b>67•••••21</b></div><div><span>Visa</span><b>BG••••309</b></div><div><span>Arrived from</span><b>Port Blair</b></div><div><span>Destination</span><b>Port Blair</b></div></div><p class="capture-safe">Dummy JSON replaces OCR until the usability and worker architecture are accepted.</p></div>`}</section><section><div class="device-boundary">${icon('P')}<div><b>Captured on manager's phone</b><span>The photo creates a candidate case immediately; it does not enter the government portal from this phone.</span></div></div><div class="device-boundary">${icon('L')}<div><b>Sent to the filing workflow</b><span>The laptop worker files only after required fields validate and the physical Form B entry is linked.</span></div></div></section></div><section class="camera-controls">${captureStep<3?`<label class="primary full" style="display:grid;place-items:center"><input class="camera-input" type="file" accept="image/*" capture="environment" data-camera>Open phone camera</label><button class="secondary full" data-demo-photo>Use demo photo</button>`:`<button class="primary full" data-create-case>Create candidate filing</button><button class="secondary full" data-reset-capture>Retake photos</button>`}</section></main>`}
+    function render(){document.querySelector('#app').innerHTML=`<div class="app-shell">${header()}${variant()==='A'?home():variant()==='B'?journey():capture()}</div>${switcher()}`;wire()}
+    function advance(){const item=selected();if(item.status==='needs_answer'){item.status='ready';item.progress=3}else if(item.status==='session'){item.status='ready';item.progress=3}else if(item.status==='ready'){item.status='filing';item.progress=4}else if(item.status==='filing'){item.status='snapshot';item.progress=5;item.evidence=`PRE-${item.id}-119`}else if(item.status==='snapshot'){item.status='submitting';item.progress=6}else if(item.status==='submitting'){item.status='filed';item.progress=7;item.ack=`ANI-${item.id.slice(-3)}-4821`}else if(item.status==='filed'){item.status='departure';item.progress=7}else if(item.status==='departure'){item.status='closed';item.progress=8}else{Object.assign(item,structuredClone(initialCases.find(original=>original.id===item.id)))}render()}
+    function createCase(){const item={id:'YRT-047',guest:'Sofia Petrov',initials:'SP',date:'2026-07-31',room:'Reef 03',source:'Phone capture',status:'ready',progress:3,passport:true,visa:true,ack:null,evidence:null};cases.unshift(item);selectedDate=item.date;selectedId=item.id;captureStep=1;captureData={passport:false,visa:false};setVariant('B')}
+    function nextCapture(){if(captureStep===1)captureData.passport=true;if(captureStep===2)captureData.visa=true;captureStep=Math.min(3,captureStep+1);render()}
+    function wire(){document.querySelectorAll('[data-cycle]').forEach(button=>button.onclick=()=>cycle(Number(button.dataset.cycle)));document.querySelector('[data-open-capture]')?.addEventListener('click',()=>setVariant('C'));document.querySelectorAll('[data-case]').forEach(button=>button.onclick=()=>{selectedId=button.dataset.case;setVariant('B')});document.querySelectorAll('[data-home]').forEach(button=>button.onclick=()=>setVariant('A'));document.querySelector('[data-date]')?.addEventListener('change',event=>{selectedDate=event.target.value;selectedId=visible()[0]?.id||selectedId;render()});document.querySelector('[data-advance]')?.addEventListener('click',advance);document.querySelector('[data-camera]')?.addEventListener('change',event=>{if(event.target.files.length)nextCapture()});document.querySelector('[data-demo-photo]')?.addEventListener('click',nextCapture);document.querySelector('[data-create-case]')?.addEventListener('click',createCase);document.querySelector('[data-reset-capture]')?.addEventListener('click',()=>{captureStep=1;captureData={passport:false,visa:false};render()})}
+    window.addEventListener('keydown',event=>{if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;if(event.key==='ArrowLeft')cycle(-1);if(event.key==='ArrowRight')cycle(1)});
+    window.addEventListener('popstate',render);
+    render();
+  </script>
+</body>
+</html>
