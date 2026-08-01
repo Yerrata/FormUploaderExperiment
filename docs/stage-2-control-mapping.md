@@ -8,7 +8,7 @@ Source: the read-only catalogue captured on the Yeratta Filing Worker on 31 July
 |---|---|---|---|
 | `surname` | `applicant_surname` | Direct | Validated text |
 | `given_name` | `applicant_givenname` | Direct | Validated text |
-| `sex` | `applicant_sex` | Transform | Exact `M`, `F` or `X` code from a closed Candidate choice |
+| `sex` | `applicant_sex` | Transform | Select exact `M`, `F` or `X` value from the live dropdown |
 | `nationality` | `applicant_nationality` | Transform | Select matching ISO alpha-3 option |
 | `permanent_address` | `applicant_permaddr` | Direct | Guest-confirmed text |
 | `permanent_city` | `applicant_permcity` | Direct | Guest-confirmed text |
@@ -23,9 +23,9 @@ Source: the read-only catalogue captured on the Yeratta Filing Worker on 31 July
 | `visa_place_of_issue` | `applicant_visaplcoissue` | Direct | Guest-confirmed text |
 | `visa_issue_country` | `visa_issue_country` | Transform | Select matching ISO alpha-3 option |
 | `visa_date_of_issue` | `applicant_visadoissue` | Transform | Format `DD/MM/YYYY` |
-| `visa_type` | `applicant_visatype` | Transform | Exact closed-option match; never fuzzy-match |
+| `visa_type` | `applicant_visatype` | Transform | Exact closed-option match; the supported dummy path uses `TOURIST VISA` (`17`) and never fuzzy-matches e-Visa labels |
 | `visa_valid_until` | `applicant_visavalidtill` | Transform | Format `DD/MM/YYYY` |
-| `arrived_from_country` | `applicant_arrivedfromcountry` | Transform | Exact normalized country-option match |
+| `arrived_from_country` | `applicant_arrivedfromcountry` | Transform | Guest selects from the captured portal vocabulary; preflight then requires an exact normalized option match |
 | `arrived_from_city` | `applicant_arrivedfromcity` | Direct | Guest-confirmed text |
 | `arrived_from_place` | `applicant_arrivedfromplace` | Direct | Guest-confirmed text |
 | `arrival_date_india` | `applicant_doarrivalindia` | Transform | Format `DD/MM/YYYY` |

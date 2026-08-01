@@ -83,8 +83,8 @@ def _catalogue() -> PortalControlCatalogue:
         "applicant_permcountry": [("Singapore", "SGP")],
         "passport_issue_country": [("SINGAPORE", "SGP")],
         "visa_issue_country": [("SINGAPORE", "SGP")],
-        "applicant_visatype": [("e-Tourist", "ET")],
-        "applicant_arrivedfromcountry": [("India", "IND")],
+        "applicant_visatype": [("TOURIST VISA", "17")],
+        "applicant_arrivedfromcountry": [("SINGAPORE", "SGP")],
         "applicant_purpovisit": [("Tourism", "16")],
         "applicant_next_destination_state_IN": [
             ("ANDAMAN AND NICOBAR ISLANDS", "35")
@@ -96,8 +96,13 @@ def _catalogue() -> PortalControlCatalogue:
     for name, options in option_controls.items():
         controls.append(_select_control(name, len(controls), options))
 
-    for value in ("M", "F", "X"):
-        controls.append(_radio_control("applicant_sex", len(controls), value))
+    controls.append(
+        _select_control(
+            "applicant_sex",
+            len(controls),
+            [("Male", "M"), ("Female", "F"), ("Transgender", "X")],
+        )
+    )
     for value in ("Y", "N"):
         controls.append(_radio_control("employed", len(controls), value))
     for value in ("I", "O"):
@@ -146,10 +151,10 @@ def _ready_case(store: CaseStore) -> str:
             ),
             "permanent_city": CandidateField(value="Singapore", source="guest_answer"),
             "permanent_country": CandidateField(value="Singapore", source="guest_answer"),
-            "arrived_from_country": CandidateField(value="India", source="guest_answer"),
-            "arrived_from_city": CandidateField(value="Port Blair", source="guest_answer"),
+            "arrived_from_country": CandidateField(value="Singapore", source="guest_answer"),
+            "arrived_from_city": CandidateField(value="Singapore", source="guest_answer"),
             "arrived_from_place": CandidateField(
-                value="Veer Savarkar Airport", source="guest_answer"
+                value="Changi Airport", source="guest_answer"
             ),
             "arrival_date_india": CandidateField(
                 value="2026-07-30", source="guest_answer"
@@ -238,7 +243,8 @@ def test_preflight_builds_a_deterministic_ready_plan_without_a_browser(tmp_path:
         for operation in first.operations
     }
     assert operation_by_target[("candidate.sex", "applicant_sex")].value == "M"
-    assert operation_by_target[("candidate.sex", "applicant_sex")].action == FillAction.CHECK_RADIO
+    assert operation_by_target[("candidate.sex", "applicant_sex")].action == FillAction.SELECT_OPTION
+    assert operation_by_target[("candidate.visa_type", "applicant_visatype")].value == "17"
     assert operation_by_target[("candidate.employed_in_india", "employed")].value == "N"
     assert operation_by_target[("candidate.purpose_of_visit", "applicant_purpovisit")].value == "16"
     assert operation_by_target[("constant.date_of_birth", "dobformat")].value == "DY"
@@ -352,6 +358,32 @@ def test_preflight_detects_safe_catalogue_drift(tmp_path: Path):
         for blocker in plan.blockers
     )
     assert not any(operation.source_field == "candidate.surname" for operation in plan.operations)
+
+
+def test_preflight_keeps_unmapped_e_tourist_visa_blocked(tmp_path: Path):
+    store = CaseStore(tmp_path)
+    case_id = _ready_case(store)
+    _write_preflight_inputs(tmp_path, _catalogue())
+    candidate = store.load_candidate(case_id)
+    assert candidate is not None
+    candidate.fields["visa_type"] = CandidateField(
+        value="e-Tourist",
+        source="guest_correction",
+    )
+    store.save_candidate(candidate)
+
+    plan = preflight_case(store=store, data_root=tmp_path, case_id=case_id)
+
+    assert plan.status == FillPlanStatus.BLOCKED
+    assert any(
+        blocker.code == "catalogue_option_label_mismatch"
+        and blocker.field == "visa_type"
+        for blocker in plan.blockers
+    )
+    assert not any(
+        operation.source_field == "candidate.visa_type"
+        for operation in plan.operations
+    )
 
 
 def test_preflight_detects_guest_photo_tampering(tmp_path: Path):
