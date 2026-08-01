@@ -77,18 +77,27 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert capture.status_code == 303
     candidate = app.state.store.load_candidate(created.metadata.case_id)
     assert candidate is not None
+    assert candidate.value("permanent_address") == "12 EXAMPLE STREET"
+    assert candidate.fields["permanent_address"].source == "passport_dummy"
+
+    review_page = client.get(f"/guest/{token}/review")
+    assert review_page.status_code == 200
+    assert "12 EXAMPLE STREET" in review_page.text
+    assert "already filled" in review_page.text.lower()
 
     review_values = {
         name: candidate.value(name)
         for name in EXTRACTED_FIELD_NAMES
     }
     review_values["passport_number"] = "GUEST-CORRECTED-001"
+    review_values["permanent_address"] = "99 Corrected Home Road"
     review = client.post(f"/guest/{token}/review", data=review_values)
     assert review.status_code == 303
 
     first_question = client.get(f"/guest/{token}/question")
     assert first_question.status_code == 200
-    assert "permanently reside" in first_question.text.lower()
+    assert "arrive from immediately" in first_question.text.lower()
+    assert "permanent home address" not in first_question.text.lower()
     for field_name in QUESTION_FIELD_NAMES:
         current = app.state.store.load_candidate(created.metadata.case_id)
         assert current is not None
@@ -110,6 +119,10 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     correction = summary.candidate.fields["passport_number"]
     assert correction.source == "guest_correction"
     assert correction.original_value == "E12345884"
+    address_correction = summary.candidate.fields["permanent_address"]
+    assert address_correction.source == "guest_correction"
+    assert address_correction.original_value == "12 EXAMPLE STREET"
+    assert address_correction.value == "99 Corrected Home Road"
     assert (tmp_path / "cases" / created.metadata.case_id / "filing-request.json").is_file()
     passport = (
         tmp_path
