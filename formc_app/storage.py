@@ -151,7 +151,7 @@ class CaseStore:
         original_filename: str | None,
         content: bytes,
     ) -> str:
-        if document_kind not in {"passport", "visa"}:
+        if document_kind not in {"passport", "visa", "guest_photo"}:
             raise ValueError("Unsupported document kind")
         suffix = Path(original_filename or "capture.jpg").suffix.lower()
         if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".pdf"}:
@@ -161,10 +161,22 @@ class CaseStore:
         metadata = self.load_metadata(case_id)
         if document_kind == "passport":
             metadata.passport_document = relative_path
-        else:
+        elif document_kind == "visa":
             metadata.visa_document = relative_path
+        else:
+            metadata.guest_photo_document = relative_path
         self.save_metadata(metadata)
         return relative_path
+
+    def document_path(self, case_id: str, relative_path: str) -> Path:
+        case_dir = self._case_dir(case_id).resolve()
+        path = (case_dir / relative_path).resolve()
+        if case_dir not in path.parents or not path.is_file():
+            raise ValueError("Case document path is missing or escapes its case folder")
+        return path
+
+    def document_sha256(self, case_id: str, relative_path: str) -> str:
+        return self.sha256(self.document_path(case_id, relative_path).read_bytes())
 
     def save_candidate(self, candidate: CandidateFormC) -> None:
         path = self._case_dir(candidate.case_id) / "candidate.json"
@@ -180,7 +192,13 @@ class CaseStore:
         path = self._case_dir(filing_request.case_id) / "filing-request.json"
         if path.exists():
             existing = FilingRequest.model_validate_json(path.read_text("utf-8"))
-            if existing.candidate_sha256 != filing_request.candidate_sha256:
+            if (
+                existing.candidate_sha256 != filing_request.candidate_sha256
+                or existing.guest_photo_sha256 != filing_request.guest_photo_sha256
+                or existing.guest_photo_source != filing_request.guest_photo_source
+                or existing.guest_photo_suitability_confirmed_at
+                != filing_request.guest_photo_suitability_confirmed_at
+            ):
                 raise ValueError("A different Filing Request already exists for this case")
             return
         self._atomic_write(path, self._json_bytes(filing_request))

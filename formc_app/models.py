@@ -73,6 +73,7 @@ class CaseMetadata(BaseModel):
     dummy_profile: str
     passport_document: str | None = None
     visa_document: str | None = None
+    guest_photo_document: str | None = None
 
 
 class CaseState(BaseModel):
@@ -101,6 +102,19 @@ class FilingRequest(BaseModel):
     request_version: int = 1
     requested_at: datetime = Field(default_factory=utc_now)
     candidate_sha256: str
+    guest_photo_sha256: str | None = None
+    guest_photo_source: Literal["guest_camera"] | None = None
+    guest_photo_suitability_confirmed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def require_version_two_photo_contract(self) -> "FilingRequest":
+        if self.request_version >= 2 and (
+            not self.guest_photo_sha256
+            or self.guest_photo_source is None
+            or self.guest_photo_suitability_confirmed_at is None
+        ):
+            raise ValueError("Version 2 Filing Requests must seal the approved guest photo")
+        return self
 
 
 class CaseSummary(BaseModel):

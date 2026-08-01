@@ -9,6 +9,7 @@ from formc_app.dummy_extraction import extract_dummy
 from formc_app.fill_plan import (
     BLOCKED_CANDIDATE_FIELDS,
     DATE_FIELDS,
+    DERIVED_FIELDS,
     DIRECT_FIELDS,
     NOT_SUBMITTED_FIELDS,
     OPTION_LABEL_FIELDS,
@@ -60,9 +61,12 @@ def _radio_control(name: str, ordinal: int, value: str) -> PortalControl:
 
 def _catalogue() -> PortalControlCatalogue:
     controls: list[PortalControl] = []
-    text_names = list(DIRECT_FIELDS.values()) + list(DATE_FIELDS.values()) + [
-        "applicant_dob"
-    ]
+    text_names = (
+        list(DIRECT_FIELDS.values())
+        + list(DATE_FIELDS.values())
+        + list(DERIVED_FIELDS.values())
+        + ["applicant_dob"]
+    )
     for name in text_names:
         controls.append(_text_control(name, len(controls)))
 
@@ -94,6 +98,15 @@ def _catalogue() -> PortalControlCatalogue:
         )
     )
     controls.append(_text_control("applicant_refpincode", len(controls)))
+    controls.append(
+        PortalControl(
+            ordinal=len(controls),
+            tag="input",
+            name="file1",
+            element_id="file1",
+            input_type="file",
+        )
+    )
 
     return PortalControlCatalogue(
         portal_location="https://indianfrro.gov.in/frro/FormC/formc.jsp",
@@ -143,10 +156,20 @@ def _ready_case(store: CaseStore) -> str:
         validated_at=utc_now(),
     )
     store.save_candidate(candidate)
+    guest_photo_path = store.save_document(
+        metadata.case_id,
+        "guest_photo",
+        "guest-photo.jpg",
+        b"guest-photo",
+    )
     store.save_filing_request(
         FilingRequest(
             case_id=metadata.case_id,
+            request_version=2,
             candidate_sha256=store.candidate_sha256(candidate),
+            guest_photo_sha256=store.document_sha256(metadata.case_id, guest_photo_path),
+            guest_photo_source="guest_camera",
+            guest_photo_suitability_confirmed_at=utc_now(),
         )
     )
     store.update_status(metadata.case_id, CaseStatus.READY_FOR_FILING, "Ready")
@@ -182,7 +205,7 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     assert first.status == FillPlanStatus.BLOCKED
     assert first.live_fill_enabled is False
     assert first.live_submit_enabled is False
-    assert len(first.operations) == 31
+    assert len(first.operations) == 33
     assert {operation.portal_control for operation in first.operations}.isdisjoint(
         LIVE_SUBMISSION_CONTROL_IDS
     )
@@ -198,6 +221,7 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     assert operation_by_target[("constant.date_of_birth", "dobformat")].value == "DY"
     assert operation_by_target[("candidate.date_of_birth", "applicant_dob")].value == "17/02/1990"
     assert operation_by_target[("candidate.check_in_date", "applicant_doarrivalhotel")].value == "31/07/2026"
+    assert operation_by_target[("candidate.check_in_date+candidate.check_out_date", "applicant_intnddurhotel")].value == "3"
     assert operation_by_target[("candidate.nationality", "applicant_nationality")].value == "SGP"
     assert operation_by_target[("property.reference_address", "applicant_refaddr")].value == "Yeratta local test address"
     assert operation_by_target[("property.reference_state_code", "applicant_refstate")].value == "1"
@@ -207,16 +231,18 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     assert district.value == "640"
     assert district.runtime_option_check_required is True
     assert operation_by_target[("property.reference_pin_code", "applicant_refpincode")].value == "744211"
+    photo = operation_by_target[("filing_request.guest_photo", "file1")]
+    assert photo.action == FillAction.UPLOAD_FILE
+    assert photo.value == "documents/guest_photo.jpg"
+    assert photo.value_sha256 == first.guest_photo_sha256
 
     blocker_codes = {blocker.code for blocker in first.blockers}
     assert blocker_codes == {
         "arrival_time_format_unverified",
         "next_destination_schema_unresolved",
-        "intended_stay_units_unresolved",
         "filer_reference_semantics_unresolved",
         "special_category_semantics_unresolved",
         "visa_subtype_condition_unresolved",
-        "guest_photo_policy_unresolved",
     }
     persisted = json.loads(
         (tmp_path / "cases" / case_id / "fill-plan.json").read_text("utf-8")
@@ -260,10 +286,25 @@ def test_preflight_detects_safe_catalogue_drift(tmp_path: Path):
     assert not any(operation.source_field == "candidate.surname" for operation in plan.operations)
 
 
+def test_preflight_detects_guest_photo_tampering(tmp_path: Path):
+    store = CaseStore(tmp_path)
+    case_id = _ready_case(store)
+    _write_preflight_inputs(tmp_path, _catalogue())
+    metadata = store.load_metadata(case_id)
+    assert metadata.guest_photo_document is not None
+    store.document_path(case_id, metadata.guest_photo_document).write_bytes(b"changed")
+
+    plan = preflight_case(store=store, data_root=tmp_path, case_id=case_id)
+
+    assert any(blocker.code == "guest_photo_hash_mismatch" for blocker in plan.blockers)
+    assert not any(operation.action == FillAction.UPLOAD_FILE for operation in plan.operations)
+
+
 def test_every_candidate_field_has_a_fill_plan_policy():
     classified = (
         set(DIRECT_FIELDS)
         | set(DATE_FIELDS)
+        | set(DERIVED_FIELDS)
         | set(OPTION_LABEL_FIELDS)
         | {"date_of_birth", "sex", "employed_in_india", "purpose_of_visit"}
         | set(BLOCKED_CANDIDATE_FIELDS)

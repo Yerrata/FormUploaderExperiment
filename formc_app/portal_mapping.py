@@ -8,6 +8,7 @@ class MappingStatus(StrEnum):
     DIRECT = "DIRECT"
     TRANSFORMED = "TRANSFORMED"
     DERIVED_UNCONFIRMED = "DERIVED_UNCONFIRMED"
+    DERIVED = "DERIVED"
     SCHEMA_CHANGE_REQUIRED = "SCHEMA_CHANGE_REQUIRED"
     NOT_SUBMITTED = "NOT_SUBMITTED"
     UNCONFIRMED = "UNCONFIRMED"
@@ -192,8 +193,8 @@ CANDIDATE_PORTAL_MAPPINGS = (
     CandidatePortalMapping(
         "check_out_date",
         ("applicant_intnddurhotel",),
-        MappingStatus.DERIVED_UNCONFIRMED,
-        "Derive intended stay duration with check-in date only after portal units are confirmed.",
+        MappingStatus.DERIVED,
+        "Derive the positive number of days between the validated check-in and checkout dates.",
     ),
     CandidatePortalMapping(
         "check_in_date",

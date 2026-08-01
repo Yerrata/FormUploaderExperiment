@@ -33,7 +33,7 @@ Source: the read-only catalogue captured on the Yeratta Filing Worker on 31 July
 | `employed_in_india` | radio `employed` | Transform | Exact `Y` or `N` code from a closed Candidate choice |
 | `purpose_of_visit` | `applicant_purpovisit` | Transform | Exact code from the frozen 20-option catalogue |
 | `next_destination` | destination branch, state/city/place controls | Schema change | Replace free text with the portal's structured branch |
-| `check_out_date` | `applicant_intnddurhotel` | Unconfirmed derivation | Confirm whether the portal expects days or nights before deriving |
+| `check_out_date` | `applicant_intnddurhotel` | Derived | Positive calendar-day difference from the validated check-in date |
 | `check_in_date` | `applicant_doarrivalhotel` | Transform | Format `DD/MM/YYYY` |
 | `room` | none | Not submitted | Yeratta case metadata only |
 | `form_b_reference` | possibly `Filerfno` | Unconfirmed | Never assume these references have the same meaning |
@@ -47,7 +47,6 @@ These live controls are marked with `*` by the government page but are not repre
 - special category, whose captured options contain only special cases and no safe normal default;
 - structured next destination, including its India/outside-India dependent controls;
 - visa subtype when the chosen visa type makes that conditional control applicable;
-- a policy-approved source for the required guest photograph.
 
 The safe live catalogue confirms these closed choice codes:
 
@@ -74,10 +73,23 @@ The final 55-control catalogue freezes these exact mappings:
 
 The district catalogue is empty until a state is selected. The offline plan therefore marks that one operation `runtime_option_check_required`; a future executor must stop if the configured district code does not appear after selecting the state.
 
+## Guest photograph and stay duration
+
+The Ministry of Home Affairs' published [Form C](https://www.mha.gov.in/PDF_Other/AnnexIII_01022018.pdf#page=46) defines intended duration as a number of days and requires a photograph. It permits the passport photograph only when a web or digital camera is unavailable. The official [e-FRRO photo requirements](https://indianfrro.gov.in/) require JPEG and a maximum size of 1 MB, with a front view, open eyes and the full head centred in frame.
+
+For this camera-equipped MVP:
+
+- the Guest Session requires a separate, current guest-camera photograph;
+- the guest confirms that it is front-facing, clear, eyes open and shows the complete head;
+- the server decodes the image, rejects images below 240 pixels on either edge or above 25 megapixels, fixes EXIF orientation, converts it to JPEG, removes source metadata, limits its longest edge to 1,200 pixels and reduces it below the portal's 1 MB limit;
+- the immutable Filing Request records the photo hash, approved source and suitability-confirmation time;
+- preflight re-hashes the persisted photograph and refuses to plan the upload if it changed;
+- `check_out_date - check_in_date` must be at least one day and is written to `applicant_intnddurhotel` as the positive number of days.
+
 ## Optional or operational controls
 
 - Indian and permanent-country phone/mobile numbers and remarks are not marked mandatory in the captured page.
-- Guest photo upload needs an explicit source and suitability rule; a passport-page photograph must not silently be treated as the required guest photo.
+- A passport-page image is never silently reused as the guest photograph.
 - Read-only age fields are portal-computed and must not be filled.
 - `Filerfno`, `GetFileno` and adjacent buttons are operational controls whose meaning remains unconfirmed.
 
@@ -92,6 +104,8 @@ The district catalogue is empty until a state is selected. The offline plan ther
 The compiler:
 
 - verifies Candidate confirmation, readiness and the Filing Request hash;
+- verifies the sealed guest-photo hash and prepares the exact `file1` upload without opening a browser;
+- derives the government stay duration as a positive number of days;
 - formats confirmed dates and frozen choice codes deterministically;
 - resolves country and visa-type options only by one exact normalized catalogue label;
 - rejects missing, duplicate, disabled, read-only or structurally changed controls and static options;
