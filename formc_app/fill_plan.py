@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from formc_app.domain import REQUIRED_FORM_C_FIELD_NAMES, intended_stay_days
+from formc_app.domain import (
+    CONDITIONALLY_REQUIRED_FIELD_NAMES,
+    REQUIRED_FORM_C_FIELD_NAMES,
+    intended_stay_days,
+    required_candidate_field_names,
+)
 from formc_app.models import CandidateFormC, CaseStatus
 from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue
 from formc_app.portal_mapping import (
@@ -18,6 +24,7 @@ from formc_app.portal_mapping import (
     PROPERTY_CONFIG_PORTAL_CONTROLS,
     PURPOSE_OF_VISIT_CHOICE_CODES,
     SEX_CHOICE_CODES,
+    NEXT_DESTINATION_SCOPE_CODES,
 )
 from formc_app.portal_session import validate_portal_url
 from formc_app.property_config import YerattaPropertyConfig, load_property_config
@@ -46,6 +53,11 @@ class FillValueSource(StrEnum):
     FILING_REQUEST = "FILING_REQUEST"
 
 
+class FillOptionMatch(StrEnum):
+    VALUE = "VALUE"
+    LABEL = "LABEL"
+
+
 class FillOperation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -57,6 +69,7 @@ class FillOperation(BaseModel):
     value_source: FillValueSource
     value_sha256: str | None = None
     runtime_option_check_required: bool = False
+    option_match: FillOptionMatch = FillOptionMatch.VALUE
 
 
 class FillBlocker(BaseModel):
@@ -70,17 +83,25 @@ class FillBlocker(BaseModel):
 class PortalFillPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     case_id: str
     candidate_sha256: str
     guest_photo_sha256: str | None = None
     catalogue_sha256: str
     property_config_sha256: str
     status: FillPlanStatus
-    live_fill_enabled: Literal[False] = False
+    live_fill_enabled: bool = False
     live_submit_enabled: Literal[False] = False
     operations: list[FillOperation] = Field(default_factory=list)
     blockers: list[FillBlocker] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def enforce_fill_only_gate(self) -> "PortalFillPlan":
+        if self.live_fill_enabled != (
+            self.status == FillPlanStatus.READY and not self.blockers
+        ):
+            raise ValueError("Live fill is enabled only for an unblocked READY plan")
+        return self
 
 
 DIRECT_FIELDS = {
@@ -118,29 +139,11 @@ DERIVED_FIELDS = {
     "check_out_date": "applicant_intnddurhotel",
 }
 
-BLOCKED_CANDIDATE_FIELDS = {
-    "arrival_time_hotel": (
-        "arrival_time_format_unverified",
-        "The portal's exact accepted hotel-arrival time format has not been verified.",
-    ),
-    "next_destination": (
-        "next_destination_schema_unresolved",
-        "The India/outside-India destination branch and dependent controls remain unresolved.",
-    ),
-}
+BLOCKED_CANDIDATE_FIELDS: dict[str, tuple[str, str]] = {}
 
 NOT_SUBMITTED_FIELDS = {"room", "form_b_reference"}
 
-GLOBAL_BLOCKERS = (
-    FillBlocker(
-        code="special_category_semantics_unresolved",
-        message="The normal-case meaning of the required special-category control is unknown.",
-    ),
-    FillBlocker(
-        code="visa_subtype_condition_unresolved",
-        message="The visa types that require a subtype and their valid subtype choices are unknown.",
-    ),
-)
+CONDITIONAL_BRANCH_FIELDS = {"special_category", "visa_subtype"}
 
 
 def _canonical_bytes(value: BaseModel) -> bytes:
@@ -212,6 +215,7 @@ class _PlanBuilder:
         source_field: str | None = None,
         value_sha256: str | None = None,
         runtime_option_check_required: bool = False,
+        option_match: FillOptionMatch = FillOptionMatch.VALUE,
     ) -> None:
         if control in LIVE_SUBMISSION_CONTROL_IDS:
             self.block(
@@ -231,6 +235,7 @@ class _PlanBuilder:
                 value_source=source,
                 value_sha256=value_sha256,
                 runtime_option_check_required=runtime_option_check_required,
+                option_match=option_match,
             )
         )
 
@@ -336,6 +341,38 @@ class _PlanBuilder:
             source=FillValueSource.PROPERTY_CONFIGURATION,
             source_field=source_field,
             runtime_option_check_required=True,
+        )
+
+    def select_dynamic_label(
+        self,
+        *,
+        field: str,
+        control: str,
+        label: str,
+        source_field: str,
+    ) -> None:
+        portal_control = self._single_control(
+            control,
+            field=field,
+            expected_tag="select",
+        )
+        if portal_control is None:
+            return
+        if not label:
+            self.block(
+                "candidate_value_missing",
+                f"Candidate field {field} is missing.",
+                field=field,
+            )
+            return
+        self._append(
+            field=field,
+            control=control,
+            action=FillAction.SELECT_OPTION,
+            value=label,
+            source_field=source_field,
+            runtime_option_check_required=True,
+            option_match=FillOptionMatch.LABEL,
         )
 
     def select_label(self, *, field: str, control: str, label: str) -> None:
@@ -467,6 +504,24 @@ def _portal_date(
         return None
 
 
+def _portal_time(
+    candidate: CandidateFormC,
+    field: str,
+    builder: _PlanBuilder,
+) -> str | None:
+    value = _candidate_value(candidate, field, builder)
+    if value is None:
+        return None
+    if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) is None:
+        builder.block(
+            "candidate_time_invalid",
+            f"Candidate field {field} is not a valid 24-hour HH:MM time.",
+            field=field,
+        )
+        return None
+    return value
+
+
 def compile_fill_plan(
     *,
     candidate: CandidateFormC,
@@ -497,6 +552,14 @@ def compile_fill_plan(
         value = _portal_date(candidate, field, builder)
         if value is not None:
             builder.fill_text(field=field, control=control, value=value)
+
+    arrival_time = _portal_time(candidate, "arrival_time_hotel", builder)
+    if arrival_time is not None:
+        builder.fill_text(
+            field="arrival_time_hotel",
+            control="applicant_timeoarrivalhotel",
+            value=arrival_time,
+        )
 
     check_in_value = _candidate_value(candidate, "check_in_date", builder)
     check_out_value = _candidate_value(candidate, "check_out_date", builder)
@@ -562,6 +625,64 @@ def compile_fill_plan(
         else:
             builder.select_value(field=field, control=control, value=portal_value)
 
+    destination_scope = _candidate_value(candidate, "next_destination_scope", builder)
+    if destination_scope is not None:
+        portal_scope = NEXT_DESTINATION_SCOPE_CODES.get(destination_scope)
+        if portal_scope is None:
+            builder.block(
+                "candidate_choice_invalid",
+                "Candidate field next_destination_scope contains an unsupported closed choice.",
+                field="next_destination_scope",
+            )
+        else:
+            builder.check_radio(
+                field="next_destination_scope",
+                control="applicant_next_dest_country_flag_r",
+                value=portal_scope,
+            )
+            if destination_scope == "outside_india":
+                builder.block(
+                    "outside_india_destination_not_supported",
+                    "The MVP fill-only executor currently supports only the India destination branch.",
+                    field="next_destination_scope",
+                )
+
+    destination_place = _candidate_value(candidate, "next_destination", builder)
+    if destination_scope == "india":
+        destination_state = _candidate_value(
+            candidate, "next_destination_state", builder
+        )
+        destination_city = _candidate_value(
+            candidate, "next_destination_city", builder
+        )
+        if destination_state is not None:
+            builder.select_label(
+                field="next_destination_state",
+                control="applicant_next_destination_state_IN",
+                label=destination_state,
+            )
+        if destination_city is not None:
+            builder.select_dynamic_label(
+                field="next_destination_city",
+                control="applicant_next_destination_city_district_IN",
+                label=destination_city,
+                source_field="candidate.next_destination_city",
+            )
+        if destination_place is not None:
+            builder.fill_text(
+                field="next_destination",
+                control="applicant_next_destination_place_IN",
+                value=destination_place,
+            )
+
+    for field in sorted(CONDITIONAL_BRANCH_FIELDS):
+        if candidate.value(field) is not None:
+            builder.block(
+                "conditional_branch_not_supported",
+                f"The activated {field} branch is not supported by the MVP fill-only executor.",
+                field=field,
+            )
+
     for field, (code, message) in BLOCKED_CANDIDATE_FIELDS.items():
         _candidate_value(candidate, field, builder)
         builder.block(code, message, field=field)
@@ -610,15 +731,24 @@ def compile_fill_plan(
             field="guest_photo",
         )
 
-    builder.blockers.extend(GLOBAL_BLOCKERS)
-
     planned_or_blocked = (
         set(DIRECT_FIELDS)
         | set(DATE_FIELDS)
         | set(DERIVED_FIELDS)
         | set(OPTION_LABEL_FIELDS)
-        | {"date_of_birth", "sex", "employed_in_india", "purpose_of_visit"}
+        | {
+            "arrival_time_hotel",
+            "date_of_birth",
+            "sex",
+            "employed_in_india",
+            "purpose_of_visit",
+            "next_destination_scope",
+            "next_destination_state",
+            "next_destination_city",
+            "next_destination",
+        }
         | set(BLOCKED_CANDIDATE_FIELDS)
+        | set(CONDITIONALLY_REQUIRED_FIELD_NAMES)
         | NOT_SUBMITTED_FIELDS
     )
     unclassified = set(REQUIRED_FORM_C_FIELD_NAMES) - planned_or_blocked
@@ -629,13 +759,15 @@ def compile_fill_plan(
             field=field,
         )
 
+    status = FillPlanStatus.BLOCKED if builder.blockers else FillPlanStatus.READY
     plan = PortalFillPlan(
         case_id=candidate.case_id,
         candidate_sha256=candidate_sha256,
         guest_photo_sha256=guest_photo_sha256,
         catalogue_sha256=CaseStore.sha256(_canonical_bytes(catalogue)),
         property_config_sha256=CaseStore.sha256(_canonical_bytes(property_config)),
-        status=FillPlanStatus.BLOCKED if builder.blockers else FillPlanStatus.READY,
+        status=status,
+        live_fill_enabled=status == FillPlanStatus.READY,
         operations=builder.operations,
         blockers=builder.blockers,
     )
@@ -676,7 +808,10 @@ def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> Portal
                 message="The Candidate has not been guest-confirmed and validated.",
             )
         )
-    missing = candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
+    candidate_values = {
+        name: candidate.value(name) for name in candidate.fields
+    }
+    missing = candidate.missing(required_candidate_field_names(candidate_values))
     if missing:
         envelope_blockers.append(
             FillBlocker(

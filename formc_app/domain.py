@@ -154,9 +154,28 @@ FORM_FIELDS = (
         choices=PURPOSE_OF_VISIT_CHOICES,
     ),
     FormField(
+        "next_destination_scope",
+        "Next destination country",
+        "Will your next destination be within India or outside India?",
+        input_type="select",
+        choices=(("india", "Within India"), ("outside_india", "Outside India")),
+    ),
+    FormField(
+        "next_destination_state",
+        "Next destination state",
+        "Which Indian state or union territory will you travel to next?",
+        category=FieldCategory.CONDITIONALLY_REQUIRED,
+    ),
+    FormField(
+        "next_destination_city",
+        "Next destination city or district",
+        "Which city or district in India will you travel to next?",
+        category=FieldCategory.CONDITIONALLY_REQUIRED,
+    ),
+    FormField(
         "next_destination",
-        "Next destination",
-        "Where will you travel immediately after leaving Yeratta Resort?",
+        "Next destination place",
+        "What is the specific place you will travel to immediately after leaving Yeratta Resort?",
     ),
     FormField(
         "check_out_date",
@@ -224,6 +243,11 @@ GUEST_QUESTION_FIELD_NAMES = tuple(
     if field.question is not None or field.name in EXTRACTED_FIELD_NAMES
 )
 
+INDIA_DESTINATION_FIELD_NAMES = (
+    "next_destination_state",
+    "next_destination_city",
+)
+
 
 def required_form_c_field_names(
     active_conditional_fields: tuple[str, ...] = (),
@@ -235,6 +259,23 @@ def required_form_c_field_names(
             "Unknown conditional Form C fields: " + ", ".join(sorted(unsupported))
         )
     return REQUIRED_FORM_C_FIELD_NAMES + tuple(active_conditional_fields)
+
+
+def required_candidate_field_names(candidate_values: dict[str, str | None]) -> tuple[str, ...]:
+    """Apply only the conditional requirements that the Candidate explicitly activates."""
+    active: tuple[str, ...] = ()
+    if candidate_values.get("next_destination_scope") == "india":
+        active = INDIA_DESTINATION_FIELD_NAMES
+    return required_form_c_field_names(active)
+
+
+def guest_question_field_names(candidate_values: dict[str, str | None]) -> tuple[str, ...]:
+    """Return the smallest ordered set of questions for the Candidate's active branch."""
+    names = list(GUEST_QUESTION_FIELD_NAMES)
+    if candidate_values.get("next_destination_scope") == "india":
+        destination_index = names.index("next_destination")
+        names[destination_index:destination_index] = INDIA_DESTINATION_FIELD_NAMES
+    return tuple(names)
 
 
 def intended_stay_days(check_in_value: str, check_out_value: str) -> int:

@@ -111,7 +111,7 @@ Staff completes the normal login and CAPTCHA, then the catalogue runs immediatel
 
 The catalogue is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels, select options and static radio/checkbox choice codes in the gitignored `data/portal-controls.json`; it excludes current text/file values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. The explicit Candidate mapping and its fail-closed gaps are documented in `docs/stage-2-control-mapping.md`. Live submission remains disabled.
 
-The field registry now separates unconditional Form C readiness, conditionally required portal branches, internal hotel metadata and optional fields. Staff supplies check-in date and hotel arrival time; expected checkout also comes from staff or booking data when known and falls back to one guest question only when absent. Room stays in case metadata, and the legacy physical Form B reference is no longer collected by the MVP. Closed sex, employment and purpose-of-visit answers reject unknown values. A separate guest-camera photograph is normalised to a portal-safe JPEG, explicitly approved and sealed into the Filing Request. Intended stay is derived as the positive number of days between check-in and checkout. Destination branching, special category and conditional visa subtype remain explicit preflight blockers; no live form is filled.
+The field registry now separates unconditional Form C readiness, conditionally required portal branches, internal hotel metadata and optional fields. Staff supplies check-in date and hotel arrival time; expected checkout also comes from staff or booking data when known and falls back to one guest question only when absent. Room stays in case metadata, and the legacy physical Form B reference is no longer collected by the MVP. Closed sex, employment and purpose-of-visit answers reject unknown values. A separate guest-camera photograph is normalised to a portal-safe JPEG, explicitly approved and sealed into the Filing Request. Intended stay is derived as the positive number of days between check-in and checkout. The MVP supports the structured India next-destination branch; outside-India destinations, activated special categories and activated visa subtypes remain explicit preflight blockers.
 
 Yeratta's India reference address is Filing Worker configuration, not a guest answer. Create the gitignored `data/property.json` locally with the portal's exact state and district option codes:
 
@@ -132,4 +132,13 @@ Build the deterministic Stage 2 preflight for one sealed Filing Request with:
 .venv/bin/python -m formc_app.fill_plan YRT-YYYYMMDD-XXXX --data-dir data
 ```
 
-This is an offline operation. It does not open a browser, fill a live control or submit anything. It atomically writes `data/cases/<case-id>/fill-plan.json`, verifies that the Candidate and guest photograph still match the sealed Filing Request, validates every prepared text, choice and file operation against the redacted control catalogue and records all remaining blockers. Property address, state, district and PIN are planned from the locked configuration; the dynamically loaded district option must still be verified by exact code before a future executor selects it. The current plan is expected to report `BLOCKED` until the unresolved live semantics in `docs/stage-2-control-mapping.md` are confirmed.
+This is an offline operation. It does not open a browser, fill a live control or submit anything. It atomically writes `data/cases/<case-id>/fill-plan.json` and its SHA-256 seal, verifies that the Candidate and guest photograph still match the sealed Filing Request, validates every prepared text, choice and file operation against the redacted control catalogue and records all remaining blockers. Property address, state, district and PIN are planned from the locked configuration. A normal India-destination case becomes `READY`; unsupported or ambiguous branches remain `BLOCKED`.
+
+Fill one `READY` plan in the authenticated government portal with:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
+  .venv/bin/formc-fill-only YRT-YYYYMMDD-XXXX --data-dir data
+```
+
+The command opens the official portal in the dedicated Chromium profile and waits for normal staff login and CAPTCHA when necessary. It verifies the authenticated page, live controls, plan seal, Candidate, Filing Request, photograph, property configuration and catalogue before applying the ordered operations. Dynamically loaded district/city choices must match exactly. The filled page remains open for staff review until Enter is pressed. The executor contains no submit action and refuses both known submission controls.

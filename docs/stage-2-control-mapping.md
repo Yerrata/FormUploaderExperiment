@@ -29,10 +29,13 @@ Source: the read-only catalogue captured on the Yeratta Filing Worker on 31 July
 | `arrived_from_city` | `applicant_arrivedfromcity` | Direct | Guest-confirmed text |
 | `arrived_from_place` | `applicant_arrivedfromplace` | Direct | Guest-confirmed text |
 | `arrival_date_india` | `applicant_doarrivalindia` | Transform | Format `DD/MM/YYYY` |
-| `arrival_time_hotel` | `applicant_timeoarrivalhotel` | Transform | Staff/system supplied; format `HH:MM`; verify live acceptance before filling |
+| `arrival_time_hotel` | `applicant_timeoarrivalhotel` | Transform | Staff/system supplied; validate and fill 24-hour `HH:MM` |
 | `employed_in_india` | radio `employed` | Transform | Exact `Y` or `N` code from a closed Candidate choice |
 | `purpose_of_visit` | `applicant_purpovisit` | Transform | Exact code from the frozen 20-option catalogue |
-| `next_destination` | destination branch, state/city/place controls | Schema change | Replace free text with the portal's structured branch |
+| `next_destination_scope` | `applicant_next_dest_country_flag_r` | Transform | Exact `I` or `O` code; only `I` is supported by the MVP executor |
+| `next_destination_state` | `applicant_next_destination_state_IN` | Transform | Exact normalized state/UT label for the India branch |
+| `next_destination_city` | `applicant_next_destination_city_district_IN` | Transform | Exact normalized dynamically loaded city/district label |
+| `next_destination` | `applicant_next_destination_place_IN` | Direct | Specific place for the supported India branch |
 | `check_out_date` | `applicant_intnddurhotel` | Derived | Positive calendar-day difference from the validated check-in date |
 | `check_in_date` | `applicant_doarrivalhotel` | Transform | Format `DD/MM/YYYY` |
 | `room` | none | Not submitted | Yeratta case metadata only |
@@ -56,7 +59,7 @@ Staff supplies check-in date and expected checkout whenever known. If checkout i
 These portal branches are not represented safely by the current Candidate:
 
 - special category, whose captured options contain only special cases and no safe normal default; it is classified as conditional and must not be required until the branch is activated;
-- structured next destination, including its India/outside-India dependent controls;
+- the outside-India next-destination branch; the MVP supports only the fully structured India branch;
 - visa subtype when the chosen visa type makes that conditional control applicable; it is classified as conditional and must not be required otherwise;
 
 The safe live catalogue confirms these closed choice codes:
@@ -122,8 +125,14 @@ The compiler:
 - rejects missing, duplicate, disabled, read-only or structurally changed controls and static options;
 - requires an exact runtime option check for the state-dependent property district select;
 - excludes room metadata, the legacy Form B reference and both live submission controls;
-- keeps live filling and live submission explicitly disabled;
-- reports every unresolved semantic item above as a blocker rather than guessing.
+- enables fill-only execution only when the complete plan is `READY` and blocker-free;
+- reports every unsupported or unresolved semantic item above as a blocker rather than guessing.
+
+## Browser fill-only executor
+
+`formc_app/portal_fill.py` loads only the sealed deterministic plan. Before filling, it revalidates the Candidate, immutable Filing Request, photograph hash, property configuration, catalogue hash and the exact live control structure on an authenticated official Form C page. It then performs only text fill, exact option selection, radio check and the sealed photograph upload. Dependent city/district options are selected only after one exact runtime match.
+
+The executor has no submit operation, rejects `tmpsbmt` and `pmsbmt`, and stops with the filled page open for staff review.
 
 ## Structural probe status
 

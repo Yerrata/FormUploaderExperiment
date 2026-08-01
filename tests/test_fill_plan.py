@@ -4,7 +4,7 @@ import json
 from datetime import date, time
 from pathlib import Path
 
-from formc_app.domain import REQUIRED_FORM_C_FIELD_NAMES
+from formc_app.domain import CONDITIONALLY_REQUIRED_FIELD_NAMES, REQUIRED_FORM_C_FIELD_NAMES
 from formc_app.dummy_extraction import extract_dummy
 from formc_app.fill_plan import (
     BLOCKED_CANDIDATE_FIELDS,
@@ -14,6 +14,7 @@ from formc_app.fill_plan import (
     NOT_SUBMITTED_FIELDS,
     OPTION_LABEL_FIELDS,
     FillAction,
+    FillOptionMatch,
     FillPlanStatus,
     preflight_case,
 )
@@ -65,7 +66,11 @@ def _catalogue() -> PortalControlCatalogue:
         list(DIRECT_FIELDS.values())
         + list(DATE_FIELDS.values())
         + list(DERIVED_FIELDS.values())
-        + ["applicant_dob"]
+        + [
+            "applicant_dob",
+            "applicant_timeoarrivalhotel",
+            "applicant_next_destination_place_IN",
+        ]
     )
     for name in text_names:
         controls.append(_text_control(name, len(controls)))
@@ -79,6 +84,10 @@ def _catalogue() -> PortalControlCatalogue:
         "applicant_visatype": [("e-Tourist", "ET")],
         "applicant_arrivedfromcountry": [("India", "IND")],
         "applicant_purpovisit": [("Tourism", "16")],
+        "applicant_next_destination_state_IN": [
+            ("ANDAMAN AND NICOBAR ISLANDS", "35")
+        ],
+        "applicant_next_destination_city_district_IN": [("Select", "")],
         "applicant_refstate": [("ANDAMAN AND NICOBAR ISLANDS", "1")],
         "applicant_refstatedistr": [("Select", "")],
     }
@@ -89,6 +98,10 @@ def _catalogue() -> PortalControlCatalogue:
         controls.append(_radio_control("applicant_sex", len(controls), value))
     for value in ("Y", "N"):
         controls.append(_radio_control("employed", len(controls), value))
+    for value in ("I", "O"):
+        controls.append(
+            _radio_control("applicant_next_dest_country_flag_r", len(controls), value)
+        )
     controls.append(
         PortalControl(
             ordinal=len(controls),
@@ -142,6 +155,15 @@ def _ready_case(store: CaseStore) -> str:
             "arrival_time_hotel": CandidateField(value="14:25", source="staff"),
             "employed_in_india": CandidateField(value="no", source="guest_answer"),
             "purpose_of_visit": CandidateField(value="tourism", source="guest_answer"),
+            "next_destination_scope": CandidateField(
+                value="india", source="guest_answer"
+            ),
+            "next_destination_state": CandidateField(
+                value="Andaman and Nicobar Islands", source="guest_answer"
+            ),
+            "next_destination_city": CandidateField(
+                value="South Andaman", source="guest_answer"
+            ),
             "next_destination": CandidateField(value="Neil Island", source="guest_answer"),
             "check_out_date": CandidateField(value="2026-08-03", source="staff"),
             "check_in_date": CandidateField(value="2026-07-31", source="staff"),
@@ -191,7 +213,7 @@ def _write_preflight_inputs(data_root: Path, catalogue: PortalControlCatalogue) 
     )
 
 
-def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_path: Path):
+def test_preflight_builds_a_deterministic_ready_plan_without_a_browser(tmp_path: Path):
     store = CaseStore(tmp_path)
     case_id = _ready_case(store)
     _write_preflight_inputs(tmp_path, _catalogue())
@@ -200,10 +222,11 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     second = preflight_case(store=store, data_root=tmp_path, case_id=case_id)
 
     assert first == second
-    assert first.status == FillPlanStatus.BLOCKED
-    assert first.live_fill_enabled is False
+    assert first.status == FillPlanStatus.READY
+    assert first.live_fill_enabled is True
     assert first.live_submit_enabled is False
-    assert len(first.operations) == 33
+    assert first.blockers == []
+    assert len(first.operations) == 38
     assert {operation.portal_control for operation in first.operations}.isdisjoint(
         LIVE_SUBMISSION_CONTROL_IDS
     )
@@ -219,6 +242,7 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     assert operation_by_target[("constant.date_of_birth", "dobformat")].value == "DY"
     assert operation_by_target[("candidate.date_of_birth", "applicant_dob")].value == "17/02/1990"
     assert operation_by_target[("candidate.check_in_date", "applicant_doarrivalhotel")].value == "31/07/2026"
+    assert operation_by_target[("candidate.arrival_time_hotel", "applicant_timeoarrivalhotel")].value == "14:25"
     assert operation_by_target[("candidate.check_in_date+candidate.check_out_date", "applicant_intnddurhotel")].value == "3"
     assert operation_by_target[("candidate.nationality", "applicant_nationality")].value == "SGP"
     assert operation_by_target[("property.reference_address", "applicant_refaddr")].value == "Yeratta local test address"
@@ -228,23 +252,49 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     ]
     assert district.value == "640"
     assert district.runtime_option_check_required is True
+    destination_city = operation_by_target[
+        ("candidate.next_destination_city", "applicant_next_destination_city_district_IN")
+    ]
+    assert destination_city.value == "South Andaman"
+    assert destination_city.runtime_option_check_required is True
+    assert destination_city.option_match == FillOptionMatch.LABEL
     assert operation_by_target[("property.reference_pin_code", "applicant_refpincode")].value == "744211"
     photo = operation_by_target[("filing_request.guest_photo", "file1")]
     assert photo.action == FillAction.UPLOAD_FILE
     assert photo.value == "documents/guest_photo.jpg"
     assert photo.value_sha256 == first.guest_photo_sha256
 
-    blocker_codes = {blocker.code for blocker in first.blockers}
-    assert blocker_codes == {
-        "arrival_time_format_unverified",
-        "next_destination_schema_unresolved",
-        "special_category_semantics_unresolved",
-        "visa_subtype_condition_unresolved",
-    }
     persisted = json.loads(
         (tmp_path / "cases" / case_id / "fill-plan.json").read_text("utf-8")
     )
     assert persisted == first.model_dump(mode="json")
+    assert (tmp_path / "cases" / case_id / "fill-plan.sha256").is_file()
+
+
+def test_preflight_keeps_unsupported_destination_and_conditional_branches_blocked(
+    tmp_path: Path,
+):
+    store = CaseStore(tmp_path)
+    case_id = _ready_case(store)
+    _write_preflight_inputs(tmp_path, _catalogue())
+    candidate = store.load_candidate(case_id)
+    assert candidate is not None
+    candidate.fields["next_destination_scope"] = CandidateField(
+        value="outside_india", source="guest_answer"
+    )
+    candidate.fields["visa_subtype"] = CandidateField(
+        value="unsupported-subtype", source="guest_answer"
+    )
+    store.save_candidate(candidate)
+
+    plan = preflight_case(store=store, data_root=tmp_path, case_id=case_id)
+
+    blocker_codes = {blocker.code for blocker in plan.blockers}
+    assert plan.status == FillPlanStatus.BLOCKED
+    assert plan.live_fill_enabled is False
+    assert "filing_request_hash_mismatch" in blocker_codes
+    assert "outside_india_destination_not_supported" in blocker_codes
+    assert "conditional_branch_not_supported" in blocker_codes
 
 
 def test_preflight_detects_candidate_tampering_and_invalid_closed_choice(tmp_path: Path):
@@ -303,13 +353,28 @@ def test_every_candidate_field_has_a_fill_plan_policy():
         | set(DATE_FIELDS)
         | set(DERIVED_FIELDS)
         | set(OPTION_LABEL_FIELDS)
-        | {"date_of_birth", "sex", "employed_in_india", "purpose_of_visit"}
+        | {
+            "arrival_time_hotel",
+            "date_of_birth",
+            "sex",
+            "employed_in_india",
+            "purpose_of_visit",
+            "next_destination_scope",
+            "next_destination_state",
+            "next_destination_city",
+            "next_destination",
+        }
         | set(BLOCKED_CANDIDATE_FIELDS)
+        | set(CONDITIONALLY_REQUIRED_FIELD_NAMES)
         | NOT_SUBMITTED_FIELDS
     )
 
     assert set(REQUIRED_FORM_C_FIELD_NAMES) <= classified
     assert classified - set(REQUIRED_FORM_C_FIELD_NAMES) == {
+        "next_destination_state",
+        "next_destination_city",
+        "special_category",
+        "visa_subtype",
         "room",
         "form_b_reference",
     }

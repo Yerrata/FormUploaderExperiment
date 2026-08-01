@@ -10,6 +10,8 @@ from formc_app.domain import (
     PURPOSE_OF_VISIT_CHOICES,
     REQUIRED_FORM_C_FIELD_NAMES,
     SEX_CHOICES,
+    guest_question_field_names,
+    required_candidate_field_names,
     required_form_c_field_names,
 )
 from formc_app.portal_mapping import (
@@ -52,6 +54,18 @@ def test_fields_have_four_disjoint_readiness_categories():
     assert "form_b_reference" not in REQUIRED_FORM_C_FIELD_NAMES
 
 
+def test_india_destination_activates_only_its_two_structured_questions():
+    india_values = {"next_destination_scope": "india"}
+    outside_values = {"next_destination_scope": "outside_india"}
+
+    assert "next_destination_state" in guest_question_field_names(india_values)
+    assert "next_destination_city" in guest_question_field_names(india_values)
+    assert "next_destination_state" in required_candidate_field_names(india_values)
+    assert "next_destination_city" in required_candidate_field_names(india_values)
+    assert "next_destination_state" not in guest_question_field_names(outside_values)
+    assert "next_destination_city" not in required_candidate_field_names(outside_values)
+
+
 def test_mapping_never_targets_a_live_submission_control():
     mapped_controls = {
         control
@@ -65,7 +79,10 @@ def test_mapping_never_targets_a_live_submission_control():
 def test_ambiguous_candidate_fields_fail_closed():
     mappings = mapping_by_candidate_field()
 
-    assert mappings["next_destination"].status == MappingStatus.SCHEMA_CHANGE_REQUIRED
+    assert mappings["next_destination_scope"].status == MappingStatus.TRANSFORMED
+    assert mappings["next_destination_state"].status == MappingStatus.TRANSFORMED
+    assert mappings["next_destination_city"].status == MappingStatus.TRANSFORMED
+    assert mappings["next_destination"].status == MappingStatus.DIRECT
     assert mappings["check_out_date"].status == MappingStatus.DERIVED
     assert mappings["special_category"].status == MappingStatus.UNCONFIRMED
     assert mappings["visa_subtype"].status == MappingStatus.UNCONFIRMED
