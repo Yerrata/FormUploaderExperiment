@@ -12,10 +12,11 @@ from formc_app.domain import (
     EXTRACTED_FIELD_NAMES,
     GUEST_QUESTION_FIELD_NAMES,
     REQUIRED_FORM_C_FIELD_NAMES,
+    guest_question_field_names,
 )
 from formc_app.dummy_extraction import DUMMY_PROFILES
-from formc_app.main import create_app
-from formc_app.models import CaseStatus
+from formc_app.main import PORTAL_QUESTION_CONTROLS, create_app
+from formc_app.models import CandidateField, CaseStatus
 from formc_app.portal_catalogue import (
     PortalControl,
     PortalControlCatalogue,
@@ -83,6 +84,18 @@ GUEST_ANSWERS = {
 
 
 def write_country_catalogue(data_root: Path) -> None:
+    write_choice_catalogue(
+        data_root,
+        "applicant_arrivedfromcountry",
+        (("SINGAPORE", "SGP"), ("UNITED KINGDOM", "GBR")),
+    )
+
+
+def write_choice_catalogue(
+    data_root: Path,
+    control_name: str,
+    choices: tuple[tuple[str, str], ...],
+) -> None:
     catalogue = PortalControlCatalogue(
         portal_location="https://indianfrro.gov.in/frro/FormC/formc.jsp",
         control_count=1,
@@ -90,12 +103,12 @@ def write_country_catalogue(data_root: Path) -> None:
             PortalControl(
                 ordinal=0,
                 tag="select",
-                name="applicant_arrivedfromcountry",
-                element_id="applicant_arrivedfromcountry",
-                options=[
-                    PortalOption(label="Select", value=""),
-                    PortalOption(label="SINGAPORE", value="SGP"),
-                    PortalOption(label="UNITED KINGDOM", value="GBR"),
+                name=control_name,
+                element_id=control_name,
+                options=[PortalOption(label="Select", value="")]
+                + [
+                    PortalOption(label=label, value=value)
+                    for label, value in choices
                 ],
             )
         ],
@@ -233,7 +246,7 @@ def test_arrived_from_country_is_restricted_to_live_catalogue_options(
     assert accepted.status_code == 303
 
 
-def test_arrived_from_country_fails_closed_without_a_safe_catalogue(
+def test_portal_owned_question_falls_back_to_text_without_a_catalogue(
     tmp_path: Path,
 ):
     app = create_app(tmp_path)
@@ -251,12 +264,60 @@ def test_arrived_from_country_fails_closed_without_a_safe_catalogue(
     assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
     (tmp_path / "portal-controls.json").unlink()
 
-    assert client.get(f"/guest/{token}/question").status_code == 409
-    rejected = client.post(
+    question = client.get(f"/guest/{token}/question")
+    assert question.status_code == 200
+    assert 'class="answer-input" type="text" name="answer"' in question.text
+    accepted = client.post(
         f"/guest/{token}/question",
         data={"field_name": "arrived_from_country", "answer": "asd"},
     )
-    assert rejected.status_code == 422
+    assert accepted.status_code == 303
+    updated = app.state.store.load_candidate(created.metadata.case_id)
+    assert updated is not None
+    assert updated.value("arrived_from_country") == "asd"
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    tuple(PORTAL_QUESTION_CONTROLS),
+)
+def test_every_captured_portal_enum_renders_as_an_additional_question_combo(
+    tmp_path: Path,
+    field_name: str,
+):
+    control_name = PORTAL_QUESTION_CONTROLS[field_name]
+    write_choice_catalogue(tmp_path, control_name, (("Accepted choice", "A1"),))
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    candidate.fields["next_destination_scope"] = CandidateField(
+        value="india", source="guest_answer"
+    )
+    for name in guest_question_field_names(
+        {candidate_name: field.value for candidate_name, field in candidate.fields.items()}
+    ):
+        if name == field_name or candidate.value(name):
+            continue
+        candidate.fields[name] = CandidateField(
+            value=GUEST_ANSWERS[name], source="guest_answer"
+        )
+    candidate.fields.pop(field_name, None)
+    app.state.store.save_candidate(candidate)
+
+    question = client.get(f"/guest/{token}/question")
+
+    assert question.status_code == 200
+    assert f'name="field_name" value="{field_name}"' in question.text
+    assert '<select class="answer-input" name="answer"' in question.text
+    assert '<option value="Accepted choice">Accepted choice</option>' in question.text
 
 
 def test_guest_is_asked_for_checkout_only_when_staff_did_not_supply_it(
@@ -384,9 +445,16 @@ def test_closed_guest_choice_rejects_an_unknown_value(tmp_path: Path):
 
 @pytest.mark.parametrize(
     ("submitted_answer", "stored_value"),
-    (("Yes", "yes"), ("No", "no")),
+    (
+        ("yes", "yes"),
+        ("Yes", "yes"),
+        ("Y", "yes"),
+        ("no", "no"),
+        ("No", "no"),
+        ("N", "no"),
+    ),
 )
-def test_employment_choice_labels_are_stored_as_canonical_values(
+def test_employment_choice_values_labels_and_portal_codes_are_canonicalised(
     tmp_path: Path,
     submitted_answer: str,
     stored_value: str,

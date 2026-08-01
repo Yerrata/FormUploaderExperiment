@@ -36,6 +36,12 @@ from formc_app.models import (
     utc_now,
 )
 from formc_app.portal_catalogue import PortalControlCatalogue
+from formc_app.portal_mapping import (
+    EMPLOYMENT_CHOICE_CODES,
+    NEXT_DESTINATION_SCOPE_CODES,
+    PURPOSE_OF_VISIT_CHOICE_CODES,
+    SEX_CHOICE_CODES,
+)
 from formc_app.staff_filing import StaffFilingCoordinator, _safe_error_message
 from formc_app.storage import CaseNotFoundError, CaseStore, InvalidGuestTokenError
 
@@ -120,7 +126,21 @@ def _sealed_fill_plan(
 
 
 PORTAL_QUESTION_CONTROLS = {
+    "nationality": "applicant_nationality",
+    "permanent_country": "applicant_permcountry",
+    "passport_issue_country": "passport_issue_country",
+    "visa_issue_country": "visa_issue_country",
+    "visa_type": "applicant_visatype",
     "arrived_from_country": "applicant_arrivedfromcountry",
+    "next_destination_state": "applicant_next_destination_state_IN",
+    "next_destination_city": "applicant_next_destination_city_district_IN",
+}
+
+PORTAL_CHOICE_CODES = {
+    "sex": SEX_CHOICE_CODES,
+    "employed_in_india": EMPLOYMENT_CHOICE_CODES,
+    "purpose_of_visit": PURPOSE_OF_VISIT_CHOICE_CODES,
+    "next_destination_scope": NEXT_DESTINATION_SCOPE_CODES,
 }
 
 
@@ -140,7 +160,8 @@ def _portal_question_choices(
     controls = [
         control
         for control in catalogue.controls
-        if control.name == control_name and control.tag == "select"
+        if control.tag == "select"
+        and control_name in {control.name, control.element_id}
     ]
     if len(controls) != 1 or controls[0].disabled or controls[0].read_only:
         return ()
@@ -160,10 +181,16 @@ def _validate_candidate_input(
     definition = FIELD_BY_NAME[field_name]
     choices = portal_choices or definition.choices
     if choices:
+        portal_codes = PORTAL_CHOICE_CODES.get(field_name, {})
         matches = {
             choice_value
             for choice_value, choice_label in choices
-            if value.casefold() in {choice_value.casefold(), choice_label.casefold()}
+            if value.casefold()
+            in {
+                choice_value.casefold(),
+                choice_label.casefold(),
+                portal_codes.get(choice_value, "").casefold(),
+            }
         }
         if len(matches) != 1:
             raise ValueError(f"Choose a supported value for {definition.label}")
@@ -500,14 +527,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         if not missing_questions:
             return RedirectResponse(request.url_for("guest_confirm", token=token), status_code=303)
         field = FIELD_BY_NAME[missing_questions[0]]
-        answer_choices = field.choices
-        if field.name in PORTAL_QUESTION_CONTROLS:
-            answer_choices = _portal_question_choices(root, field.name)
-            if not answer_choices:
-                raise HTTPException(
-                    status_code=409,
-                    detail="The safe portal country catalogue is unavailable; staff must renew it before this answer can be accepted.",
-                )
+        answer_choices = _portal_question_choices(root, field.name) or field.choices
         return templates.TemplateResponse(
             request,
             "guest_question.html",
@@ -538,10 +558,6 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="An answer is required")
         try:
             portal_choices = _portal_question_choices(root, field_name)
-            if field_name in PORTAL_QUESTION_CONTROLS and not portal_choices:
-                raise ValueError(
-                    "The safe portal country catalogue is unavailable; staff must renew it before this answer can be accepted."
-                )
             value = _validate_candidate_input(
                 field_name,
                 value,
