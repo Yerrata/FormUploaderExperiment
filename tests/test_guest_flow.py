@@ -164,6 +164,11 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
         assert current is not None
         if current.value(field_name):
             continue
+        question = client.get(f"/guest/{token}/question")
+        assert question.status_code == 200
+        assert 'role="combobox"' in question.text
+        assert 'list="answer-options"' in question.text
+        assert f'name="field_name" value="{field_name}"' in question.text
         assert client.post(
             f"/guest/{token}/question",
             data={"field_name": field_name, "answer": GUEST_ANSWERS[field_name]},
@@ -226,9 +231,10 @@ def test_arrived_from_country_is_restricted_to_live_catalogue_options(
 
     question = client.get(f"/guest/{token}/question")
     assert question.status_code == 200
-    assert '<select class="answer-input" name="answer"' in question.text
-    assert '<option value="SINGAPORE">SINGAPORE</option>' in question.text
-    assert '<option value="UNITED KINGDOM">UNITED KINGDOM</option>' in question.text
+    assert 'role="combobox"' in question.text
+    assert '<datalist id="answer-options">' in question.text
+    assert '<option value="SINGAPORE" label="SINGAPORE"></option>' in question.text
+    assert '<option value="UNITED KINGDOM" label="UNITED KINGDOM"></option>' in question.text
 
     rejected = client.post(
         f"/guest/{token}/question",
@@ -266,7 +272,8 @@ def test_portal_owned_question_falls_back_to_text_without_a_catalogue(
 
     question = client.get(f"/guest/{token}/question")
     assert question.status_code == 200
-    assert 'class="answer-input" type="text" name="answer"' in question.text
+    assert 'role="combobox"' in question.text
+    assert '<datalist id="answer-options">' in question.text
     accepted = client.post(
         f"/guest/{token}/question",
         data={"field_name": "arrived_from_country", "answer": "asd"},
@@ -316,8 +323,8 @@ def test_every_captured_portal_enum_renders_as_an_additional_question_combo(
 
     assert question.status_code == 200
     assert f'name="field_name" value="{field_name}"' in question.text
-    assert '<select class="answer-input" name="answer"' in question.text
-    assert '<option value="Accepted choice">Accepted choice</option>' in question.text
+    assert 'role="combobox"' in question.text
+    assert '<option value="Accepted choice" label="Accepted choice"></option>' in question.text
 
 
 def test_guest_is_asked_for_checkout_only_when_staff_did_not_supply_it(

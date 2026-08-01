@@ -9,16 +9,24 @@
   <p>Only information required for Form C is requested.</p>
   <form method="post" class="form-stack">
     <input type="hidden" name="field_name" value="{{ field.name }}">
-    {% if answer_choices %}
-    <select class="answer-input" name="answer" autofocus required>
-      <option value="">Choose one</option>
+    <input
+      class="answer-input"
+      type="{{ field.input_type if field.input_type != 'select' else 'text' }}"
+      name="answer"
+      list="answer-options"
+      role="combobox"
+      aria-controls="answer-options"
+      aria-autocomplete="list"
+      placeholder="{{ 'Choose or type an answer' if answer_choices else 'Type your answer' }}"
+      autocomplete="off"
+      autofocus
+      required
+    >
+    <datalist id="answer-options">
       {% for value, label in answer_choices %}
-      <option value="{{ value }}">{{ label }}</option>
+      <option value="{{ value }}" label="{{ label }}"></option>
       {% endfor %}
-    </select>
-    {% else %}
-    <input class="answer-input" type="{{ field.input_type }}" name="answer" placeholder="Type your answer" autocomplete="off" autofocus required>
-    {% endif %}
+    </datalist>
     <button class="primary full" type="submit">Continue</button>
   </form>
 </div>
