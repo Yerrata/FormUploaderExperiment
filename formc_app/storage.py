@@ -5,7 +5,7 @@ import json
 import os
 import secrets
 import tempfile
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -80,8 +80,9 @@ class CaseStore:
         *,
         check_in_date: date,
         check_out_date: date | None,
+        arrival_time_hotel: time | None = None,
         room: str,
-        form_b_reference: str,
+        form_b_reference: str | None = None,
         dummy_profile: str,
         token_lifetime: timedelta = timedelta(minutes=30),
     ) -> CaseMetadata:
@@ -101,8 +102,10 @@ class CaseStore:
             guest_token_expires_at=utc_now() + token_lifetime,
             check_in_date=check_in_date,
             check_out_date=check_out_date,
+            arrival_time_hotel=arrival_time_hotel
+            or datetime.now().astimezone().time().replace(second=0, microsecond=0),
             room=room.strip(),
-            form_b_reference=form_b_reference.strip(),
+            form_b_reference=form_b_reference.strip() if form_b_reference else None,
             dummy_profile=dummy_profile,
         )
         state = CaseState(case_id=case_id)

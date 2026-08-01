@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
-from datetime import date
+from datetime import date, datetime, time
 from io import BytesIO
 from pathlib import Path
 
@@ -17,8 +17,9 @@ from formc_app.domain import (
     EXTRACTED_FIELD_NAMES,
     FIELD_BY_NAME,
     FORM_FIELDS,
-    QUESTION_FIELD_NAMES,
-    REQUIRED_FIELD_NAMES,
+    GUEST_QUESTION_FIELD_NAMES,
+    REQUIRED_FORM_C_FIELD_NAMES,
+    REQUIRED_FORM_C_FIELDS,
     intended_stay_days,
 )
 from formc_app.dummy_extraction import DUMMY_PROFILES, extract_dummy
@@ -138,6 +139,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 "cases": visible_cases,
                 "available_dates": available_dates,
                 "selected_date": selected_date,
+                "default_arrival_time": datetime.now().astimezone().strftime("%H:%M"),
                 "profiles": DUMMY_PROFILES,
                 "status": CaseStatus,
             },
@@ -148,8 +150,8 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         request: Request,
         check_in_date: date = Form(...),
         check_out_date: date | None = Form(None),
+        arrival_time_hotel: time = Form(...),
         room: str = Form(...),
-        form_b_reference: str = Form(...),
         dummy_profile: str = Form(...),
     ):
         if dummy_profile not in DUMMY_PROFILES:
@@ -159,8 +161,8 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         metadata = _store(request).create_case(
             check_in_date=check_in_date,
             check_out_date=check_out_date,
+            arrival_time_hotel=arrival_time_hotel,
             room=room,
-            form_b_reference=form_b_reference,
             dummy_profile=dummy_profile,
         )
         return RedirectResponse(
@@ -297,8 +299,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             "check_out_date": summary.metadata.check_out_date.isoformat()
             if summary.metadata.check_out_date
             else None,
-            "room": summary.metadata.room,
-            "form_b_reference": summary.metadata.form_b_reference,
+            "arrival_time_hotel": summary.metadata.arrival_time_hotel.strftime("%H:%M")
+            if summary.metadata.arrival_time_hotel
+            else None,
         }
         for name, value in staff_values.items():
             fields[name] = CandidateField(value=value, source="staff")
@@ -324,6 +327,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 "fields": [
                     (FIELD_BY_NAME[name], summary.candidate.fields[name])
                     for name in EXTRACTED_FIELD_NAMES
+                    if summary.candidate.value(name)
                 ],
             },
         )
@@ -336,6 +340,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="No extracted candidate exists")
         form = await request.form()
         for name in EXTRACTED_FIELD_NAMES:
+            current = candidate.fields.get(name)
+            if current is None or current.value is None:
+                continue
             new_value = str(form.get(name, "")).strip()
             if not new_value:
                 raise HTTPException(status_code=422, detail=f"{FIELD_BY_NAME[name].label} is required")
@@ -343,7 +350,6 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 _validate_candidate_input(name, new_value)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-            current = candidate.fields[name]
             if new_value != current.value:
                 candidate.fields[name] = CandidateField(
                     value=new_value,
@@ -365,14 +371,21 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         candidate = summary.candidate
         if candidate is None:
             return RedirectResponse(request.url_for("guest_capture", token=token), status_code=303)
-        missing_questions = [name for name in QUESTION_FIELD_NAMES if not candidate.value(name)]
+        missing_questions = [
+            name for name in GUEST_QUESTION_FIELD_NAMES if not candidate.value(name)
+        ]
         if not missing_questions:
             return RedirectResponse(request.url_for("guest_confirm", token=token), status_code=303)
         field = FIELD_BY_NAME[missing_questions[0]]
         return templates.TemplateResponse(
             request,
             "guest_question.html",
-            {"case": summary, "field": field},
+            {
+                "case": summary,
+                "field": field,
+                "question_text": field.question
+                or f"Enter the {field.label.lower()} exactly as shown on the document.",
+            },
         )
 
     @app.post("/guest/{token}/question")
@@ -386,7 +399,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         candidate = summary.candidate
         if candidate is None:
             raise HTTPException(status_code=409, detail="No candidate exists")
-        if field_name not in QUESTION_FIELD_NAMES:
+        if field_name not in GUEST_QUESTION_FIELD_NAMES:
             raise HTTPException(status_code=400, detail="Unsupported question")
         value = answer.strip()
         if not value:
@@ -409,7 +422,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         summary = _guest_case(request, token)
         if summary.candidate is None:
             return RedirectResponse(request.url_for("guest_capture", token=token), status_code=303)
-        missing = summary.candidate.missing(REQUIRED_FIELD_NAMES)
+        missing = summary.candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
         return templates.TemplateResponse(
             request,
             "guest_confirm.html",
@@ -426,7 +439,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         candidate = summary.candidate
         if candidate is None:
             raise HTTPException(status_code=409, detail="No candidate exists")
-        missing = candidate.missing(REQUIRED_FIELD_NAMES)
+        missing = candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
         if missing:
             raise HTTPException(status_code=422, detail=f"Missing mandatory fields: {', '.join(missing)}")
         try:
@@ -484,7 +497,11 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "mock_form_c.html",
-            {"case_id": case_id, "fields": FORM_FIELDS, "submission": existing},
+            {
+                "case_id": case_id,
+                "fields": REQUIRED_FORM_C_FIELDS,
+                "submission": existing,
+            },
         )
 
     @app.post(
@@ -499,7 +516,10 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         except CaseNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Case not found") from exc
         form = await request.form()
-        values = {name: str(form.get(name, "")).strip() for name in REQUIRED_FIELD_NAMES}
+        values = {
+            name: str(form.get(name, "")).strip()
+            for name in REQUIRED_FORM_C_FIELD_NAMES
+        }
         missing = [FIELD_BY_NAME[name].label for name, value in values.items() if not value]
         if missing:
             return templates.TemplateResponse(
@@ -507,7 +527,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 "mock_form_c.html",
                 {
                     "case_id": case_id,
-                    "fields": FORM_FIELDS,
+                    "fields": REQUIRED_FORM_C_FIELDS,
                     "values": values,
                     "missing": missing,
                     "submission": None,

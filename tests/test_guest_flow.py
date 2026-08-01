@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -9,9 +9,10 @@ from PIL import Image
 
 from formc_app.domain import (
     EXTRACTED_FIELD_NAMES,
-    QUESTION_FIELD_NAMES,
-    REQUIRED_FIELD_NAMES,
+    GUEST_QUESTION_FIELD_NAMES,
+    REQUIRED_FORM_C_FIELD_NAMES,
 )
+from formc_app.dummy_extraction import DUMMY_PROFILES
 from formc_app.main import create_app
 from formc_app.models import CaseStatus
 from formc_app.storage import CaseStore, InvalidGuestTokenError
@@ -31,16 +32,24 @@ def capture_files(*, visa: bytes = b"visa-photo"):
     }
 
 
-def create_case(client: TestClient, app, *, profile: str = "daniel"):
+def create_case(
+    client: TestClient,
+    app,
+    *,
+    profile: str = "daniel",
+    check_out_date: str | None = "2026-08-03",
+):
+    staff_values = {
+        "check_in_date": "2026-07-31",
+        "arrival_time_hotel": "14:25",
+        "room": "Sea 04",
+        "dummy_profile": profile,
+    }
+    if check_out_date is not None:
+        staff_values["check_out_date"] = check_out_date
     response = client.post(
         "/staff/cases",
-        data={
-            "check_in_date": "2026-07-31",
-            "check_out_date": "2026-08-03",
-            "room": "Sea 04",
-            "form_b_reference": "B-2026-118",
-            "dummy_profile": profile,
-        },
+        data=staff_values,
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -55,7 +64,6 @@ GUEST_ANSWERS = {
     "arrived_from_city": "Port Blair",
     "arrived_from_place": "Veer Savarkar Airport",
     "arrival_date_india": "2026-07-30",
-    "arrival_time_hotel": "14:25",
     "employed_in_india": "no",
     "purpose_of_visit": "tourism",
     "next_destination": "Neil Island",
@@ -77,6 +85,10 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert capture.status_code == 303
     candidate = app.state.store.load_candidate(created.metadata.case_id)
     assert candidate is not None
+    assert candidate.value("arrival_time_hotel") == "14:25"
+    assert candidate.fields["arrival_time_hotel"].source == "staff"
+    assert "room" not in candidate.fields
+    assert "form_b_reference" not in candidate.fields
     assert candidate.value("permanent_address") == "12 EXAMPLE STREET"
     assert candidate.fields["permanent_address"].source == "passport_dummy"
 
@@ -98,7 +110,8 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert first_question.status_code == 200
     assert "arrive from immediately" in first_question.text.lower()
     assert "permanent home address" not in first_question.text.lower()
-    for field_name in QUESTION_FIELD_NAMES:
+    assert "arrival_time_hotel" not in GUEST_QUESTION_FIELD_NAMES
+    for field_name in GUEST_QUESTION_FIELD_NAMES:
         current = app.state.store.load_candidate(created.metadata.case_id)
         assert current is not None
         if current.value(field_name):
@@ -145,6 +158,100 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert client.get(f"/guest/{token}/review").status_code == 403
 
 
+def test_guest_is_asked_for_checkout_only_when_staff_did_not_supply_it(
+    tmp_path: Path,
+):
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app, check_out_date=None)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    review_values = {name: candidate.value(name) for name in EXTRACTED_FIELD_NAMES}
+    assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
+
+    for field_name in GUEST_QUESTION_FIELD_NAMES:
+        if field_name == "check_out_date":
+            continue
+        current = app.state.store.load_candidate(created.metadata.case_id)
+        assert current is not None
+        if current.value(field_name):
+            continue
+        assert client.post(
+            f"/guest/{token}/question",
+            data={"field_name": field_name, "answer": GUEST_ANSWERS[field_name]},
+        ).status_code == 303
+
+    checkout_question = client.get(f"/guest/{token}/question")
+    assert checkout_question.status_code == 200
+    assert "expect to check out" in checkout_question.text.lower()
+
+
+def test_missing_extracted_document_fields_fall_back_to_guest_questions(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setitem(
+        DUMMY_PROFILES["daniel"],
+        "permanent_address",
+        (None, "passport_dummy"),
+    )
+    monkeypatch.setitem(
+        DUMMY_PROFILES["daniel"],
+        "passport_number",
+        (None, "passport_dummy"),
+    )
+    monkeypatch.setitem(
+        DUMMY_PROFILES["daniel"],
+        "visa_number",
+        (None, "visa_dummy"),
+    )
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    review_values = {
+        name: candidate.value(name)
+        for name in EXTRACTED_FIELD_NAMES
+        if candidate.value(name)
+    }
+    review_page = client.get(f"/guest/{token}/review")
+    assert "Passport number" not in review_page.text
+    assert "Visa number" not in review_page.text
+    assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
+
+    questions_and_answers = (
+        ("permanent home address", "12 Example Street", "permanent_address"),
+        ("passport number", "P-MISSING-1", "passport_number"),
+        ("visa number", "V-MISSING-1", "visa_number"),
+    )
+    for expected_text, answer, field_name in questions_and_answers:
+        question = client.get(f"/guest/{token}/question")
+        assert expected_text in question.text.lower()
+        assert client.post(
+            f"/guest/{token}/question",
+            data={"field_name": field_name, "answer": answer},
+        ).status_code == 303
+
+    updated = app.state.store.load_candidate(created.metadata.case_id)
+    assert updated is not None
+    assert updated.fields["permanent_address"].source == "guest_answer"
+    assert updated.fields["passport_number"].source == "guest_answer"
+    assert updated.fields["visa_number"].source == "guest_answer"
+
+
 def test_closed_guest_choice_rejects_an_unknown_value(tmp_path: Path):
     app = create_app(tmp_path)
     client = TestClient(app, follow_redirects=False)
@@ -167,11 +274,11 @@ def test_closed_guest_choice_rejects_an_unknown_value(tmp_path: Path):
 
     assert response.status_code == 422
 
-    invalid_time = client.post(
+    unsupported_arrival_time_question = client.post(
         f"/guest/{token}/question",
         data={"field_name": "arrival_time_hotel", "answer": "25:90"},
     )
-    assert invalid_time.status_code == 422
+    assert unsupported_arrival_time_question.status_code == 400
 
 
 def test_missing_document_and_missing_answer_block_progress(tmp_path: Path):
@@ -222,8 +329,8 @@ def test_staff_rejects_checkout_that_is_not_later_than_check_in(tmp_path: Path):
         data={
             "check_in_date": "2026-07-31",
             "check_out_date": "2026-07-31",
+            "arrival_time_hotel": "14:25",
             "room": "Sea 04",
-            "form_b_reference": "B-2026-118",
             "dummy_profile": "daniel",
         },
     )
@@ -237,15 +344,15 @@ def test_guest_token_is_single_case_and_expires(tmp_path: Path):
     first = store.create_case(
         check_in_date=date(2026, 7, 31),
         check_out_date=date(2026, 8, 2),
+        arrival_time_hotel=time(14, 25),
         room="One",
-        form_b_reference="B-1",
         dummy_profile="daniel",
     )
     second = store.create_case(
         check_in_date=date(2026, 7, 31),
         check_out_date=date(2026, 8, 2),
+        arrival_time_hotel=time(14, 30),
         room="Two",
-        form_b_reference="B-2",
         dummy_profile="elena",
     )
     assert store.require_guest_token(first.guest_token).metadata.case_id == first.case_id
@@ -254,8 +361,8 @@ def test_guest_token_is_single_case_and_expires(tmp_path: Path):
     expired = store.create_case(
         check_in_date=date(2026, 7, 31),
         check_out_date=None,
+        arrival_time_hotel=time(14, 35),
         room="Three",
-        form_b_reference="B-3",
         dummy_profile="aiko",
         token_lifetime=timedelta(seconds=-1),
     )
@@ -274,6 +381,9 @@ def test_dashboard_and_case_pages_render_on_mobile_first_app(tmp_path: Path):
     dashboard = client.get("/staff?check_in_date=2026-07-31")
     assert dashboard.status_code == 200
     assert "Outstanding cases" in dashboard.text
+    assert 'name="arrival_time_hotel"' in dashboard.text
+    assert "Defaults to now" in dashboard.text
+    assert "Form B reference" not in dashboard.text
     detail = client.get(f"/staff/cases/{created.metadata.case_id}")
     assert detail.status_code == 200
     assert "Government site" in detail.text
@@ -283,7 +393,7 @@ def test_mock_portal_reuses_identical_ack_and_rejects_conflicting_duplicate(tmp_
     app = create_app(tmp_path)
     client = TestClient(app, follow_redirects=False)
     created = create_case(client, app, profile="aiko")
-    values = {name: f"value-{name}" for name in REQUIRED_FIELD_NAMES}
+    values = {name: f"value-{name}" for name in REQUIRED_FORM_C_FIELD_NAMES}
 
     first = client.post(
         f"/mock-government/form-c/{created.metadata.case_id}",

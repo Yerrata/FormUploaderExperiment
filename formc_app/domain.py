@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
+
+
+class FieldCategory(StrEnum):
+    REQUIRED_FORM_C = "required_form_c"
+    CONDITIONALLY_REQUIRED = "conditionally_required"
+    INTERNAL_HOTEL_METADATA = "internal_hotel_metadata"
+    OPTIONAL = "optional"
 
 
 @dataclass(frozen=True)
@@ -12,6 +20,7 @@ class FormField:
     critical: bool = False
     input_type: str = "text"
     choices: tuple[tuple[str, str], ...] = ()
+    category: FieldCategory = FieldCategory.REQUIRED_FORM_C
 
 
 SEX_CHOICES = (
@@ -128,7 +137,6 @@ FORM_FIELDS = (
     FormField(
         "arrival_time_hotel",
         "Time of arrival at Yeratta",
-        "At what time did you arrive at Yeratta?",
         input_type="time",
     ),
     FormField(
@@ -157,12 +165,49 @@ FORM_FIELDS = (
         input_type="date",
     ),
     FormField("check_in_date", "Check-in date"),
-    FormField("room", "Room"),
-    FormField("form_b_reference", "Physical Form B reference"),
+    FormField(
+        "special_category",
+        "Special category",
+        category=FieldCategory.CONDITIONALLY_REQUIRED,
+    ),
+    FormField(
+        "visa_subtype",
+        "Visa subtype",
+        category=FieldCategory.CONDITIONALLY_REQUIRED,
+    ),
+    FormField(
+        "room",
+        "Room",
+        category=FieldCategory.INTERNAL_HOTEL_METADATA,
+    ),
+    FormField(
+        "form_b_reference",
+        "Physical Form B reference",
+        category=FieldCategory.OPTIONAL,
+    ),
 )
 
 FIELD_BY_NAME = {field.name: field for field in FORM_FIELDS}
-REQUIRED_FIELD_NAMES = tuple(field.name for field in FORM_FIELDS)
+FIELDS_BY_CATEGORY = {
+    category: tuple(field for field in FORM_FIELDS if field.category == category)
+    for category in FieldCategory
+}
+REQUIRED_FORM_C_FIELDS = FIELDS_BY_CATEGORY[FieldCategory.REQUIRED_FORM_C]
+CONDITIONALLY_REQUIRED_FIELDS = FIELDS_BY_CATEGORY[
+    FieldCategory.CONDITIONALLY_REQUIRED
+]
+INTERNAL_HOTEL_METADATA_FIELDS = FIELDS_BY_CATEGORY[
+    FieldCategory.INTERNAL_HOTEL_METADATA
+]
+OPTIONAL_FIELDS = FIELDS_BY_CATEGORY[FieldCategory.OPTIONAL]
+REQUIRED_FORM_C_FIELD_NAMES = tuple(field.name for field in REQUIRED_FORM_C_FIELDS)
+CONDITIONALLY_REQUIRED_FIELD_NAMES = tuple(
+    field.name for field in CONDITIONALLY_REQUIRED_FIELDS
+)
+INTERNAL_HOTEL_METADATA_FIELD_NAMES = tuple(
+    field.name for field in INTERNAL_HOTEL_METADATA_FIELDS
+)
+OPTIONAL_FIELD_NAMES = tuple(field.name for field in OPTIONAL_FIELDS)
 PASSPORT_PREFILL_FIELD_NAMES = (
     "permanent_address",
     "permanent_city",
@@ -173,9 +218,23 @@ EXTRACTED_FIELD_NAMES = tuple(
     for field in FORM_FIELDS
     if field.critical or field.name in PASSPORT_PREFILL_FIELD_NAMES
 )
-QUESTION_FIELD_NAMES = tuple(
-    field.name for field in FORM_FIELDS if field.question is not None
+GUEST_QUESTION_FIELD_NAMES = tuple(
+    field.name
+    for field in REQUIRED_FORM_C_FIELDS
+    if field.question is not None or field.name in EXTRACTED_FIELD_NAMES
 )
+
+
+def required_form_c_field_names(
+    active_conditional_fields: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """Return unconditional fields plus only explicitly activated portal branches."""
+    unsupported = set(active_conditional_fields) - set(CONDITIONALLY_REQUIRED_FIELD_NAMES)
+    if unsupported:
+        raise ValueError(
+            "Unknown conditional Form C fields: " + ", ".join(sorted(unsupported))
+        )
+    return REQUIRED_FORM_C_FIELD_NAMES + tuple(active_conditional_fields)
 
 
 def intended_stay_days(check_in_value: str, check_out_value: str) -> int:

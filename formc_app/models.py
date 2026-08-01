@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from enum import StrEnum
 from typing import Literal
 
@@ -68,8 +68,9 @@ class CaseMetadata(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
     check_in_date: date
     check_out_date: date | None = None
+    arrival_time_hotel: time | None = None
     room: str
-    form_b_reference: str
+    form_b_reference: str | None = None
     dummy_profile: str
     passport_document: str | None = None
     visa_document: str | None = None

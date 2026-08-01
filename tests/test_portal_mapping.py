@@ -1,8 +1,16 @@
+from itertools import combinations
+
 from formc_app.domain import (
+    CONDITIONALLY_REQUIRED_FIELD_NAMES,
     EMPLOYMENT_CHOICES,
+    FORM_FIELDS,
+    GUEST_QUESTION_FIELD_NAMES,
+    INTERNAL_HOTEL_METADATA_FIELD_NAMES,
+    OPTIONAL_FIELD_NAMES,
     PURPOSE_OF_VISIT_CHOICES,
-    REQUIRED_FIELD_NAMES,
+    REQUIRED_FORM_C_FIELD_NAMES,
     SEX_CHOICES,
+    required_form_c_field_names,
 )
 from formc_app.portal_mapping import (
     CANDIDATE_PORTAL_MAPPINGS,
@@ -20,8 +28,28 @@ from formc_app.portal_mapping import (
 def test_every_current_candidate_field_has_one_explicit_mapping():
     mappings = mapping_by_candidate_field()
 
-    assert set(mappings) == set(REQUIRED_FIELD_NAMES)
+    assert set(mappings) == {field.name for field in FORM_FIELDS}
     assert len(mappings) == len(CANDIDATE_PORTAL_MAPPINGS)
+
+
+def test_fields_have_four_disjoint_readiness_categories():
+    categories = (
+        set(REQUIRED_FORM_C_FIELD_NAMES),
+        set(CONDITIONALLY_REQUIRED_FIELD_NAMES),
+        set(INTERNAL_HOTEL_METADATA_FIELD_NAMES),
+        set(OPTIONAL_FIELD_NAMES),
+    )
+
+    assert set().union(*categories) == {field.name for field in FORM_FIELDS}
+    assert all(not left & right for left, right in combinations(categories, 2))
+    assert required_form_c_field_names() == REQUIRED_FORM_C_FIELD_NAMES
+    assert required_form_c_field_names(("visa_subtype",)) == (
+        *REQUIRED_FORM_C_FIELD_NAMES,
+        "visa_subtype",
+    )
+    assert "arrival_time_hotel" not in GUEST_QUESTION_FIELD_NAMES
+    assert "room" not in REQUIRED_FORM_C_FIELD_NAMES
+    assert "form_b_reference" not in REQUIRED_FORM_C_FIELD_NAMES
 
 
 def test_mapping_never_targets_a_live_submission_control():
@@ -39,7 +67,9 @@ def test_ambiguous_candidate_fields_fail_closed():
 
     assert mappings["next_destination"].status == MappingStatus.SCHEMA_CHANGE_REQUIRED
     assert mappings["check_out_date"].status == MappingStatus.DERIVED
-    assert mappings["form_b_reference"].status == MappingStatus.UNCONFIRMED
+    assert mappings["special_category"].status == MappingStatus.UNCONFIRMED
+    assert mappings["visa_subtype"].status == MappingStatus.UNCONFIRMED
+    assert mappings["form_b_reference"].status == MappingStatus.NOT_SUBMITTED
 
 
 def test_live_radio_choice_codes_are_frozen_from_the_safe_catalogue():
