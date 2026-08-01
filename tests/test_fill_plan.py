@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 
-from formc_app.domain import REQUIRED_FIELD_NAMES
+from formc_app.domain import REQUIRED_FORM_C_FIELD_NAMES
 from formc_app.dummy_extraction import extract_dummy
 from formc_app.fill_plan import (
     BLOCKED_CANDIDATE_FIELDS,
@@ -119,8 +119,8 @@ def _ready_case(store: CaseStore) -> str:
     metadata = store.create_case(
         check_in_date=date(2026, 7, 31),
         check_out_date=date(2026, 8, 3),
+        arrival_time_hotel=time(14, 25),
         room="Sea 04",
-        form_b_reference="B-118",
         dummy_profile="daniel",
     )
     fields = extract_dummy("daniel")
@@ -139,14 +139,12 @@ def _ready_case(store: CaseStore) -> str:
             "arrival_date_india": CandidateField(
                 value="2026-07-30", source="guest_answer"
             ),
-            "arrival_time_hotel": CandidateField(value="14:25", source="guest_answer"),
+            "arrival_time_hotel": CandidateField(value="14:25", source="staff"),
             "employed_in_india": CandidateField(value="no", source="guest_answer"),
             "purpose_of_visit": CandidateField(value="tourism", source="guest_answer"),
             "next_destination": CandidateField(value="Neil Island", source="guest_answer"),
             "check_out_date": CandidateField(value="2026-08-03", source="staff"),
             "check_in_date": CandidateField(value="2026-07-31", source="staff"),
-            "room": CandidateField(value="Sea 04", source="staff"),
-            "form_b_reference": CandidateField(value="B-118", source="staff"),
         }
     )
     candidate = CandidateFormC(
@@ -240,7 +238,6 @@ def test_preflight_builds_a_deterministic_blocked_plan_without_a_browser(tmp_pat
     assert blocker_codes == {
         "arrival_time_format_unverified",
         "next_destination_schema_unresolved",
-        "filer_reference_semantics_unresolved",
         "special_category_semantics_unresolved",
         "visa_subtype_condition_unresolved",
     }
@@ -311,4 +308,8 @@ def test_every_candidate_field_has_a_fill_plan_policy():
         | NOT_SUBMITTED_FIELDS
     )
 
-    assert classified == set(REQUIRED_FIELD_NAMES)
+    assert set(REQUIRED_FORM_C_FIELD_NAMES) <= classified
+    assert classified - set(REQUIRED_FORM_C_FIELD_NAMES) == {
+        "room",
+        "form_b_reference",
+    }

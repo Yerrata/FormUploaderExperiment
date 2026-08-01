@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from formc_app.domain import REQUIRED_FIELD_NAMES, intended_stay_days
+from formc_app.domain import REQUIRED_FORM_C_FIELD_NAMES, intended_stay_days
 from formc_app.models import CandidateFormC, CaseStatus
 from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue
 from formc_app.portal_mapping import (
@@ -127,13 +127,9 @@ BLOCKED_CANDIDATE_FIELDS = {
         "next_destination_schema_unresolved",
         "The India/outside-India destination branch and dependent controls remain unresolved.",
     ),
-    "form_b_reference": (
-        "filer_reference_semantics_unresolved",
-        "Filerfno has not been proven to mean the physical Form B reference.",
-    ),
 }
 
-NOT_SUBMITTED_FIELDS = {"room"}
+NOT_SUBMITTED_FIELDS = {"room", "form_b_reference"}
 
 GLOBAL_BLOCKERS = (
     FillBlocker(
@@ -625,7 +621,7 @@ def compile_fill_plan(
         | set(BLOCKED_CANDIDATE_FIELDS)
         | NOT_SUBMITTED_FIELDS
     )
-    unclassified = set(REQUIRED_FIELD_NAMES) - planned_or_blocked
+    unclassified = set(REQUIRED_FORM_C_FIELD_NAMES) - planned_or_blocked
     for field in sorted(unclassified):
         builder.block(
             "candidate_field_unclassified",
@@ -680,7 +676,7 @@ def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> Portal
                 message="The Candidate has not been guest-confirmed and validated.",
             )
         )
-    missing = candidate.missing(REQUIRED_FIELD_NAMES)
+    missing = candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
     if missing:
         envelope_blockers.append(
             FillBlocker(

@@ -6,11 +6,11 @@ It does not connect to or submit anything to the Indian government portal.
 
 ## What works
 
-1. Staff creates a time-limited, single-case Guest Session.
+1. Staff creates a time-limited, single-case Guest Session; hotel arrival time defaults to the current local time and can be corrected before handoff.
 2. The guest photographs passport and visa pages on a phone or tablet.
 3. A replaceable dummy extraction adapter creates the candidate identity fields.
 4. The guest sees what came from the photographs and can correct it.
-5. The wizard asks only missing mandatory questions, one at a time.
+5. The wizard asks only missing guest-sourced Form C questions, one at a time. It never asks for hotel arrival time, room, the locked property address or the unproven Form B/Filer reference.
 6. Confirmation writes one validated `candidate.json` and one immutable `filing-request.json`.
 7. The filesystem status moves the case into the Filing Queue.
 8. A Python Playwright worker fills the separate mock Form C website.
@@ -111,7 +111,7 @@ Staff completes the normal login and CAPTCHA, then the catalogue runs immediatel
 
 The catalogue is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels, select options and static radio/checkbox choice codes in the gitignored `data/portal-controls.json`; it excludes current text/file values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. The explicit Candidate mapping and its fail-closed gaps are documented in `docs/stage-2-control-mapping.md`. Live submission remains disabled.
 
-The confirmed, unconditional live fields are now represented in the Candidate and collected through the existing one-question-at-a-time guest wizard. Closed sex, employment and purpose-of-visit answers reject unknown values. A separate guest-camera photograph is normalised to a portal-safe JPEG, explicitly approved and sealed into the Filing Request. Intended stay is derived as the positive number of days between check-in and checkout. Destination branching, special category and conditional visa subtype remain explicit blockers; no live form is filled.
+The field registry now separates unconditional Form C readiness, conditionally required portal branches, internal hotel metadata and optional fields. Staff supplies check-in date and hotel arrival time; expected checkout also comes from staff or booking data when known and falls back to one guest question only when absent. Room stays in case metadata, and the legacy physical Form B reference is no longer collected by the MVP. Closed sex, employment and purpose-of-visit answers reject unknown values. A separate guest-camera photograph is normalised to a portal-safe JPEG, explicitly approved and sealed into the Filing Request. Intended stay is derived as the positive number of days between check-in and checkout. Destination branching, special category and conditional visa subtype remain explicit preflight blockers; no live form is filled.
 
 Yeratta's India reference address is Filing Worker configuration, not a guest answer. Create the gitignored `data/property.json` locally with the portal's exact state and district option codes:
 

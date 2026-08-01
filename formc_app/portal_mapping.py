@@ -165,7 +165,7 @@ CANDIDATE_PORTAL_MAPPINGS = (
         "arrival_time_hotel",
         ("applicant_timeoarrivalhotel",),
         MappingStatus.TRANSFORMED,
-        "Format the guest-confirmed time as HH:MM; filling remains disabled until live acceptance is verified.",
+        "Format the staff-supplied time as HH:MM; filling remains disabled until live acceptance is verified.",
     ),
     CandidatePortalMapping(
         "employed_in_india",
@@ -203,6 +203,18 @@ CANDIDATE_PORTAL_MAPPINGS = (
         "Format the arrival-at-hotel date as DD/MM/YYYY.",
     ),
     CandidatePortalMapping(
+        "special_category",
+        (),
+        MappingStatus.UNCONFIRMED,
+        "Require and map this field only when its portal branch is explicitly activated.",
+    ),
+    CandidatePortalMapping(
+        "visa_subtype",
+        (),
+        MappingStatus.UNCONFIRMED,
+        "Require and map this field only when the selected visa type activates its portal branch.",
+    ),
+    CandidatePortalMapping(
         "room",
         (),
         MappingStatus.NOT_SUBMITTED,
@@ -210,9 +222,9 @@ CANDIDATE_PORTAL_MAPPINGS = (
     ),
     CandidatePortalMapping(
         "form_b_reference",
-        ("Filerfno",),
-        MappingStatus.UNCONFIRMED,
-        "Do not assume the portal filer reference is the physical Form B reference.",
+        (),
+        MappingStatus.NOT_SUBMITTED,
+        "Legacy optional metadata only; the MVP does not collect or submit it.",
     ),
 )
 

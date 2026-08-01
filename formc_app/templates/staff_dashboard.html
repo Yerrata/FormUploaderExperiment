@@ -32,11 +32,13 @@
   <details class="panel new-case" open>
     <summary><span><span class="eyebrow">Stage 1</span><b>Start Guest Session</b></span><span>＋</span></summary>
     <form method="post" action="{{ request.url_for('create_staff_case') }}" class="form-stack">
-      <label><span>Check-in date</span><input type="date" name="check_in_date" value="{{ selected_date }}" required></label>
-      <label><span>Expected checkout date</span><input type="date" name="check_out_date"></label>
       <div class="form-pair">
+        <label><span>Check-in date</span><input type="date" name="check_in_date" value="{{ selected_date }}" required></label>
+        <label><span>Arrival time</span><input type="time" name="arrival_time_hotel" value="{{ default_arrival_time }}" required><small>Defaults to now. Correct it if the guest arrived earlier.</small></label>
+      </div>
+      <div class="form-pair">
+        <label><span>Expected checkout date</span><input type="date" name="check_out_date"></label>
         <label><span>Room</span><input name="room" placeholder="Sea 04" required></label>
-        <label><span>Form B reference</span><input name="form_b_reference" placeholder="B-2026-118" required></label>
       </div>
       <label><span>Dummy passport profile</span><select name="dummy_profile">{% for profile in profiles %}<option value="{{ profile }}">{{ profile|title }}</option>{% endfor %}</select></label>
       <div class="notice"><b>Extraction is intentionally fake.</b><span>The photographs are captured, but Stage 1 inserts deterministic test data so we can validate the rest of the workflow first.</span></div>

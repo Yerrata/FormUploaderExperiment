@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 from types import SimpleNamespace
 
-from formc_app.domain import REQUIRED_FIELD_NAMES
+from formc_app.domain import REQUIRED_FORM_C_FIELD_NAMES
 from formc_app.dummy_extraction import extract_dummy
 from formc_app.models import CandidateField, CandidateFormC, CaseStatus
 from formc_app.storage import CaseStore
@@ -15,8 +15,8 @@ def ready_case(store: CaseStore) -> str:
     metadata = store.create_case(
         check_in_date=date(2026, 7, 31),
         check_out_date=date(2026, 8, 3),
+        arrival_time_hotel=time(14, 25),
         room="Sea 04",
-        form_b_reference="B-118",
         dummy_profile="aiko",
     )
     fields = extract_dummy("aiko")
@@ -24,11 +24,10 @@ def ready_case(store: CaseStore) -> str:
         {
             "check_in_date": CandidateField(value="2026-07-31", source="staff"),
             "check_out_date": CandidateField(value="2026-08-03", source="staff"),
-            "room": CandidateField(value="Sea 04", source="staff"),
-            "form_b_reference": CandidateField(value="B-118", source="staff"),
+            "arrival_time_hotel": CandidateField(value="14:25", source="staff"),
         }
     )
-    for name in REQUIRED_FIELD_NAMES:
+    for name in REQUIRED_FORM_C_FIELD_NAMES:
         fields.setdefault(name, CandidateField(value=f"value-{name}", source="guest_answer"))
     candidate = CandidateFormC(case_id=metadata.case_id, fields=fields)
     store.save_candidate(candidate)
@@ -108,7 +107,7 @@ def test_worker_fills_every_field_and_seals_evidence_before_acknowledgement(tmp_
 
     summary = store.get_summary(case_id)
     assert summary.state.status == CaseStatus.VERIFIED
-    assert set(fake_page.values) == set(REQUIRED_FIELD_NAMES)
+    assert set(fake_page.values) == set(REQUIRED_FORM_C_FIELD_NAMES)
     assert all(fake_page.values.values())
     assert summary.evidence is not None
     assert summary.evidence.acknowledgement == "MOCK-ACK-1001"

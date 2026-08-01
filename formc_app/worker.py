@@ -9,7 +9,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from formc_app.domain import REQUIRED_FIELD_NAMES
+from formc_app.domain import REQUIRED_FORM_C_FIELD_NAMES
 from formc_app.models import CaseStatus, EvidenceManifest, utc_now
 from formc_app.storage import CaseStore
 
@@ -31,7 +31,7 @@ class FilingWorker:
             candidate = self.store.load_candidate(case_id)
             if candidate is None:
                 raise ValueError("Candidate Form C is missing")
-            missing = candidate.missing(REQUIRED_FIELD_NAMES)
+            missing = candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
             if missing:
                 raise ValueError(f"Candidate Form C is incomplete: {', '.join(missing)}")
 
@@ -42,7 +42,7 @@ class FilingWorker:
                     f"{self.base_url}/mock-government/form-c/{case_id}",
                     wait_until="networkidle",
                 )
-                for field_name in REQUIRED_FIELD_NAMES:
+                for field_name in REQUIRED_FORM_C_FIELD_NAMES:
                     page.locator(f'[name="{field_name}"]').fill(candidate.value(field_name) or "")
 
                 candidate_bytes = self.store.canonical_candidate_bytes(candidate)
