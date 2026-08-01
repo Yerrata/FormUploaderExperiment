@@ -165,7 +165,7 @@ CANDIDATE_PORTAL_MAPPINGS = (
         "arrival_time_hotel",
         ("applicant_timeoarrivalhotel",),
         MappingStatus.TRANSFORMED,
-        "Format the staff-supplied time as HH:MM; filling remains disabled until live acceptance is verified.",
+        "Format the staff-supplied time as validated 24-hour HH:MM text.",
     ),
     CandidatePortalMapping(
         "employed_in_india",
@@ -180,15 +180,28 @@ CANDIDATE_PORTAL_MAPPINGS = (
         "Select the exact portal code from PURPOSE_OF_VISIT_CHOICE_CODES.",
     ),
     CandidatePortalMapping(
+        "next_destination_scope",
+        ("applicant_next_dest_country_flag_r",),
+        MappingStatus.TRANSFORMED,
+        "Select India or outside India from a closed Candidate choice.",
+    ),
+    CandidatePortalMapping(
+        "next_destination_state",
+        ("applicant_next_destination_state_IN",),
+        MappingStatus.TRANSFORMED,
+        "For the supported India branch, select one exact normalized state label.",
+    ),
+    CandidatePortalMapping(
+        "next_destination_city",
+        ("applicant_next_destination_city_district_IN",),
+        MappingStatus.TRANSFORMED,
+        "After selecting the state, select one exact normalized city or district label.",
+    ),
+    CandidatePortalMapping(
         "next_destination",
-        (
-            "applicant_next_dest_country_flag_r",
-            "applicant_next_destination_state_IN",
-            "applicant_next_destination_city_district_IN",
-            "applicant_next_destination_place_IN",
-        ),
-        MappingStatus.SCHEMA_CHANGE_REQUIRED,
-        "Replace free text with destination country branch plus structured location.",
+        ("applicant_next_destination_place_IN",),
+        MappingStatus.DIRECT,
+        "For the supported India branch, fill the specific destination place.",
     ),
     CandidatePortalMapping(
         "check_out_date",

@@ -17,10 +17,11 @@ from formc_app.domain import (
     EXTRACTED_FIELD_NAMES,
     FIELD_BY_NAME,
     FORM_FIELDS,
-    GUEST_QUESTION_FIELD_NAMES,
     REQUIRED_FORM_C_FIELD_NAMES,
     REQUIRED_FORM_C_FIELDS,
+    guest_question_field_names,
     intended_stay_days,
+    required_candidate_field_names,
 )
 from formc_app.dummy_extraction import DUMMY_PROFILES, extract_dummy
 from formc_app.models import (
@@ -87,6 +88,10 @@ def _candidate_display(candidate: CandidateFormC | None):
         for field in FORM_FIELDS
         if field.name in candidate.fields
     ]
+
+
+def _candidate_values(candidate: CandidateFormC) -> dict[str, str | None]:
+    return {name: candidate.value(name) for name in candidate.fields}
 
 
 def _validate_candidate_input(field_name: str, value: str) -> None:
@@ -372,7 +377,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         if candidate is None:
             return RedirectResponse(request.url_for("guest_capture", token=token), status_code=303)
         missing_questions = [
-            name for name in GUEST_QUESTION_FIELD_NAMES if not candidate.value(name)
+            name
+            for name in guest_question_field_names(_candidate_values(candidate))
+            if not candidate.value(name)
         ]
         if not missing_questions:
             return RedirectResponse(request.url_for("guest_confirm", token=token), status_code=303)
@@ -399,7 +406,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         candidate = summary.candidate
         if candidate is None:
             raise HTTPException(status_code=409, detail="No candidate exists")
-        if field_name not in GUEST_QUESTION_FIELD_NAMES:
+        if field_name not in guest_question_field_names(_candidate_values(candidate)):
             raise HTTPException(status_code=400, detail="Unsupported question")
         value = answer.strip()
         if not value:
@@ -422,7 +429,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         summary = _guest_case(request, token)
         if summary.candidate is None:
             return RedirectResponse(request.url_for("guest_capture", token=token), status_code=303)
-        missing = summary.candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
+        missing = summary.candidate.missing(
+            required_candidate_field_names(_candidate_values(summary.candidate))
+        )
         return templates.TemplateResponse(
             request,
             "guest_confirm.html",
@@ -439,7 +448,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         candidate = summary.candidate
         if candidate is None:
             raise HTTPException(status_code=409, detail="No candidate exists")
-        missing = candidate.missing(REQUIRED_FORM_C_FIELD_NAMES)
+        missing = candidate.missing(
+            required_candidate_field_names(_candidate_values(candidate))
+        )
         if missing:
             raise HTTPException(status_code=422, detail=f"Missing mandatory fields: {', '.join(missing)}")
         try:

@@ -213,8 +213,26 @@ class CaseStore:
         return FilingRequest.model_validate_json(path.read_text("utf-8"))
 
     def save_fill_plan(self, case_id: str, fill_plan: Any) -> None:
-        path = self._case_dir(case_id) / "fill-plan.json"
-        self._atomic_write(path, self._json_bytes(fill_plan))
+        content = self._json_bytes(fill_plan)
+        case_dir = self._case_dir(case_id)
+        self._atomic_write(case_dir / "fill-plan.json", content)
+        self._atomic_write(
+            case_dir / "fill-plan.sha256",
+            (self.sha256(content) + "\n").encode("ascii"),
+        )
+
+    def load_sealed_fill_plan_bytes(self, case_id: str) -> bytes:
+        case_dir = self._case_dir(case_id)
+        plan_path = case_dir / "fill-plan.json"
+        seal_path = case_dir / "fill-plan.sha256"
+        try:
+            content = plan_path.read_bytes()
+            expected_sha256 = seal_path.read_text("ascii").strip()
+        except FileNotFoundError as exc:
+            raise ValueError("A sealed fill plan is missing") from exc
+        if not secrets.compare_digest(self.sha256(content), expected_sha256):
+            raise ValueError("The fill plan no longer matches its seal")
+        return content
 
     def load_candidate(self, case_id: str) -> CandidateFormC | None:
         path = self._case_dir(case_id) / "candidate.json"

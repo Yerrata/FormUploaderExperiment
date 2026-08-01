@@ -66,6 +66,9 @@ GUEST_ANSWERS = {
     "arrival_date_india": "2026-07-30",
     "employed_in_india": "no",
     "purpose_of_visit": "tourism",
+    "next_destination_scope": "india",
+    "next_destination_state": "Andaman and Nicobar Islands",
+    "next_destination_city": "South Andaman",
     "next_destination": "Neil Island",
     "check_out_date": "2026-08-03",
 }
@@ -111,7 +114,7 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert "arrive from immediately" in first_question.text.lower()
     assert "permanent home address" not in first_question.text.lower()
     assert "arrival_time_hotel" not in GUEST_QUESTION_FIELD_NAMES
-    for field_name in GUEST_QUESTION_FIELD_NAMES:
+    for field_name in GUEST_ANSWERS:
         current = app.state.store.load_candidate(created.metadata.case_id)
         assert current is not None
         if current.value(field_name):
@@ -175,7 +178,7 @@ def test_guest_is_asked_for_checkout_only_when_staff_did_not_supply_it(
     review_values = {name: candidate.value(name) for name in EXTRACTED_FIELD_NAMES}
     assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
 
-    for field_name in GUEST_QUESTION_FIELD_NAMES:
+    for field_name in GUEST_ANSWERS:
         if field_name == "check_out_date":
             continue
         current = app.state.store.load_candidate(created.metadata.case_id)
