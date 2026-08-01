@@ -99,7 +99,7 @@ class CaseState(BaseModel):
 class FillOnlyRunState(BaseModel):
     case_id: str
     status: FillOnlyRunStatus = FillOnlyRunStatus.NOT_STARTED
-    message: str = "Run offline preflight before opening the government portal"
+    message: str = "Open the government portal and fill it from the case plan"
     updated_at: datetime = Field(default_factory=utc_now)
     started_at: datetime | None = None
     finished_at: datetime | None = None

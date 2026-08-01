@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 import formc_app.main as main_module
-from formc_app.fill_plan import FillBlocker, FillPlanStatus, PortalFillPlan
+from formc_app.fill_plan import FillPlanStatus, PortalFillPlan
 from formc_app.main import create_app
 from formc_app.models import CaseStatus, FillOnlyRunState, FillOnlyRunStatus
 from formc_app.staff_filing import StaffFilingCoordinator
@@ -24,89 +24,34 @@ def _ready_case(store: CaseStore) -> str:
     store.update_status(
         metadata.case_id,
         CaseStatus.READY_FOR_FILING,
-        "Guest confirmed one Filing Request; ready for preflight",
+        "Guest confirmed one Filing Request; ready to fill",
     )
     return metadata.case_id
 
 
-def _plan(
-    case_id: str,
-    *,
-    status: FillPlanStatus = FillPlanStatus.READY,
-) -> PortalFillPlan:
-    blockers = (
-        []
-        if status == FillPlanStatus.READY
-        else [
-            FillBlocker(
-                code="conditional_branch_not_supported",
-                field="visa_subtype",
-                message="The activated visa subtype branch is not supported by the MVP.",
-            )
-        ]
-    )
+def _plan(case_id: str) -> PortalFillPlan:
     return PortalFillPlan(
         case_id=case_id,
         candidate_sha256="a" * 64,
         guest_photo_sha256="b" * 64,
         catalogue_sha256="c" * 64,
         property_config_sha256="d" * 64,
-        status=status,
-        live_fill_enabled=status == FillPlanStatus.READY,
-        blockers=blockers,
+        status=FillPlanStatus.READY,
+        live_fill_enabled=True,
     )
 
 
-def test_staff_case_runs_preflight_and_replaces_the_mock_worker_action(
-    tmp_path: Path,
-    monkeypatch,
-):
+def test_staff_case_offers_direct_fill_without_a_preflight_gate(tmp_path: Path):
     app = create_app(tmp_path)
     case_id = _ready_case(app.state.store)
     client = TestClient(app, follow_redirects=False)
 
     first_page = client.get(f"/staff/cases/{case_id}")
     assert first_page.status_code == 200
-    assert "Run safe preflight" in first_page.text
+    assert "Open portal and fill Form C" in first_page.text
+    assert "preflight" not in first_page.text.casefold()
     assert "Run mock filing worker" not in first_page.text
     assert "mock-government.local" not in first_page.text
-
-    def fake_preflight(*, store, data_root, case_id):
-        assert data_root == tmp_path
-        plan = _plan(case_id)
-        store.save_fill_plan(case_id, plan)
-        return plan
-
-    monkeypatch.setattr(main_module, "preflight_case", fake_preflight)
-    response = client.post(f"/staff/cases/{case_id}/preflight")
-    assert response.status_code == 303
-
-    ready_page = client.get(f"/staff/cases/{case_id}")
-    assert "READY plan sealed" in ready_page.text
-    assert "Open portal and fill Form C" in ready_page.text
-    assert "submission disabled" in ready_page.text
-
-
-def test_staff_case_shows_blockers_and_never_offers_fill_for_a_blocked_plan(
-    tmp_path: Path,
-    monkeypatch,
-):
-    app = create_app(tmp_path)
-    case_id = _ready_case(app.state.store)
-    client = TestClient(app, follow_redirects=False)
-
-    def fake_preflight(*, store, data_root, case_id):
-        plan = _plan(case_id, status=FillPlanStatus.BLOCKED)
-        store.save_fill_plan(case_id, plan)
-        return plan
-
-    monkeypatch.setattr(main_module, "preflight_case", fake_preflight)
-    assert client.post(f"/staff/cases/{case_id}/preflight").status_code == 303
-
-    page = client.get(f"/staff/cases/{case_id}")
-    assert "Preflight blocked by 1 safety check" in page.text
-    assert "visa_subtype" in page.text
-    assert 'action="http://testserver/staff/cases/' + case_id + '/fill-only"' not in page.text
 
 
 def test_staff_fill_action_launches_the_coordinator_without_a_cli(
@@ -115,8 +60,15 @@ def test_staff_fill_action_launches_the_coordinator_without_a_cli(
 ):
     app = create_app(tmp_path)
     case_id = _ready_case(app.state.store)
-    app.state.store.save_fill_plan(case_id, _plan(case_id))
+    prepared: list[str] = []
     launched: list[str] = []
+
+    def fake_prepare(*, store, data_root, case_id):
+        assert data_root == tmp_path
+        prepared.append(case_id)
+        plan = _plan(case_id)
+        store.save_fill_plan(case_id, plan)
+        return plan
 
     def fake_launch(selected_case_id: str) -> None:
         launched.append(selected_case_id)
@@ -129,11 +81,13 @@ def test_staff_fill_action_launches_the_coordinator_without_a_cli(
             )
         )
 
+    monkeypatch.setattr(main_module, "prepare_fill_plan", fake_prepare)
     monkeypatch.setattr(app.state.staff_filing, "launch", fake_launch)
     client = TestClient(app, follow_redirects=False)
     response = client.post(f"/staff/cases/{case_id}/fill-only")
 
     assert response.status_code == 303
+    assert prepared == [case_id]
     assert launched == [case_id]
     run = app.state.store.load_fill_only_run(case_id)
     assert run.status == FillOnlyRunStatus.REVIEW
@@ -158,7 +112,7 @@ class _SuccessfulBrowser:
 class _FailingBrowser:
     def run(self, case_id, *, hold_for_review, wait_for_browser_close, progress):
         progress(FillOnlyRunStatus.FILLING, "Filling", None)
-        raise ValueError("Live Form C controls have drifted from the sealed catalogue")
+        raise ValueError("Could not fill candidate.sex into applicant_sex")
 
 
 def test_coordinator_records_completion_and_safe_partial_fill_failure(
@@ -169,7 +123,7 @@ def test_coordinator_records_completion_and_safe_partial_fill_failure(
     case_id = _ready_case(store)
     monkeypatch.setattr(
         "formc_app.staff_filing.PortalFillExecutor.load_verified_plan",
-        lambda self, selected_case_id: (SimpleNamespace(), SimpleNamespace()),
+        lambda self, selected_case_id: SimpleNamespace(),
     )
     coordinator = StaffFilingCoordinator(
         store=store,
@@ -189,7 +143,7 @@ def test_coordinator_records_completion_and_safe_partial_fill_failure(
     assert coordinator.wait_until_idle()
     failed = store.load_fill_only_run(case_id)
     assert failed.status == FillOnlyRunStatus.FAILED
-    assert "drifted from the sealed catalogue" in failed.message
+    assert "Could not fill candidate.sex into applicant_sex" in failed.message
     assert "No automated submission occurred" in failed.message
     assert store.load_state(case_id).status == CaseStatus.READY_FOR_FILING
 
