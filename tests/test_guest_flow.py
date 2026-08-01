@@ -15,6 +15,11 @@ from formc_app.domain import (
 from formc_app.dummy_extraction import DUMMY_PROFILES
 from formc_app.main import create_app
 from formc_app.models import CaseStatus
+from formc_app.portal_catalogue import (
+    PortalControl,
+    PortalControlCatalogue,
+    PortalOption,
+)
 from formc_app.storage import CaseStore, InvalidGuestTokenError
 
 
@@ -39,6 +44,8 @@ def create_case(
     profile: str = "daniel",
     check_out_date: str | None = "2026-08-03",
 ):
+    if not (app.state.store.root / "portal-controls.json").exists():
+        write_country_catalogue(app.state.store.root)
     staff_values = {
         "check_in_date": "2026-07-31",
         "arrival_time_hotel": "14:25",
@@ -60,9 +67,9 @@ GUEST_ANSWERS = {
     "permanent_address": "12 Example Street",
     "permanent_city": "Singapore",
     "permanent_country": "Singapore",
-    "arrived_from_country": "India",
-    "arrived_from_city": "Port Blair",
-    "arrived_from_place": "Veer Savarkar Airport",
+    "arrived_from_country": "SINGAPORE",
+    "arrived_from_city": "Singapore",
+    "arrived_from_place": "Changi Airport",
     "arrival_date_india": "2026-07-30",
     "employed_in_india": "no",
     "purpose_of_visit": "tourism",
@@ -72,6 +79,30 @@ GUEST_ANSWERS = {
     "next_destination": "Neil Island",
     "check_out_date": "2026-08-03",
 }
+
+
+def write_country_catalogue(data_root: Path) -> None:
+    catalogue = PortalControlCatalogue(
+        portal_location="https://indianfrro.gov.in/frro/FormC/formc.jsp",
+        control_count=1,
+        controls=[
+            PortalControl(
+                ordinal=0,
+                tag="select",
+                name="applicant_arrivedfromcountry",
+                element_id="applicant_arrivedfromcountry",
+                options=[
+                    PortalOption(label="Select", value=""),
+                    PortalOption(label="SINGAPORE", value="SGP"),
+                    PortalOption(label="UNITED KINGDOM", value="GBR"),
+                ],
+            )
+        ],
+    )
+    (data_root / "portal-controls.json").write_text(
+        catalogue.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
 
 
 def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path):
@@ -159,6 +190,72 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     )
     assert client.get(f"/guest/{token}/done").status_code == 200
     assert client.get(f"/guest/{token}/review").status_code == 403
+
+
+def test_arrived_from_country_is_restricted_to_live_catalogue_options(
+    tmp_path: Path,
+):
+    write_country_catalogue(tmp_path)
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    review_values = {name: candidate.value(name) for name in EXTRACTED_FIELD_NAMES}
+    assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
+
+    question = client.get(f"/guest/{token}/question")
+    assert question.status_code == 200
+    assert '<select class="answer-input" name="answer"' in question.text
+    assert '<option value="SINGAPORE">SINGAPORE</option>' in question.text
+    assert '<option value="UNITED KINGDOM">UNITED KINGDOM</option>' in question.text
+
+    rejected = client.post(
+        f"/guest/{token}/question",
+        data={"field_name": "arrived_from_country", "answer": "asd"},
+    )
+    assert rejected.status_code == 422
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    assert candidate.value("arrived_from_country") is None
+
+    accepted = client.post(
+        f"/guest/{token}/question",
+        data={"field_name": "arrived_from_country", "answer": "SINGAPORE"},
+    )
+    assert accepted.status_code == 303
+
+
+def test_arrived_from_country_fails_closed_without_a_safe_catalogue(
+    tmp_path: Path,
+):
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    review_values = {name: candidate.value(name) for name in EXTRACTED_FIELD_NAMES}
+    assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
+    (tmp_path / "portal-controls.json").unlink()
+
+    assert client.get(f"/guest/{token}/question").status_code == 409
+    rejected = client.post(
+        f"/guest/{token}/question",
+        data={"field_name": "arrived_from_country", "answer": "asd"},
+    )
+    assert rejected.status_code == 422
 
 
 def test_guest_is_asked_for_checkout_only_when_staff_did_not_supply_it(

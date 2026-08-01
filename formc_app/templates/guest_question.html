@@ -9,10 +9,10 @@
   <p>Only information required for Form C is requested.</p>
   <form method="post" class="form-stack">
     <input type="hidden" name="field_name" value="{{ field.name }}">
-    {% if field.choices %}
+    {% if answer_choices %}
     <select class="answer-input" name="answer" autofocus required>
       <option value="">Choose one</option>
-      {% for value, label in field.choices %}
+      {% for value, label in answer_choices %}
       <option value="{{ value }}">{{ label }}</option>
       {% endfor %}
     </select>

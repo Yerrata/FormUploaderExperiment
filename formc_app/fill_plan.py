@@ -600,7 +600,7 @@ def compile_fill_plan(
             builder.select_label(field=field, control=control, label=value)
 
     coded_choices = (
-        ("sex", "applicant_sex", SEX_CHOICE_CODES, FillAction.CHECK_RADIO),
+        ("sex", "applicant_sex", SEX_CHOICE_CODES, FillAction.SELECT_OPTION),
         ("employed_in_india", "employed", EMPLOYMENT_CHOICE_CODES, FillAction.CHECK_RADIO),
         (
             "purpose_of_visit",

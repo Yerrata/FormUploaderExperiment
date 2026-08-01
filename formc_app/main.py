@@ -35,6 +35,7 @@ from formc_app.models import (
     MockSubmission,
     utc_now,
 )
+from formc_app.portal_catalogue import PortalControlCatalogue
 from formc_app.staff_filing import StaffFilingCoordinator, _safe_error_message
 from formc_app.storage import CaseNotFoundError, CaseStore, InvalidGuestTokenError
 
@@ -118,9 +119,48 @@ def _sealed_fill_plan(
         return None, _safe_error_message(error)
 
 
-def _validate_candidate_input(field_name: str, value: str) -> None:
+PORTAL_QUESTION_CONTROLS = {
+    "arrived_from_country": "applicant_arrivedfromcountry",
+}
+
+
+def _portal_question_choices(
+    data_root: Path,
+    field_name: str,
+) -> tuple[tuple[str, str], ...]:
+    control_name = PORTAL_QUESTION_CONTROLS.get(field_name)
+    if control_name is None:
+        return ()
+    try:
+        catalogue = PortalControlCatalogue.model_validate_json(
+            (data_root / "portal-controls.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return ()
+    controls = [
+        control
+        for control in catalogue.controls
+        if control.name == control_name and control.tag == "select"
+    ]
+    if len(controls) != 1 or controls[0].disabled or controls[0].read_only:
+        return ()
+    return tuple(
+        (option.label, option.label)
+        for option in controls[0].options
+        if option.value and option.label and not option.disabled
+    )
+
+
+def _validate_candidate_input(
+    field_name: str,
+    value: str,
+    *,
+    portal_choices: tuple[tuple[str, str], ...] = (),
+) -> None:
     definition = FIELD_BY_NAME[field_name]
-    allowed_values = {choice_value for choice_value, _ in definition.choices}
+    allowed_values = {
+        choice_value for choice_value, _ in (portal_choices or definition.choices)
+    }
     if allowed_values and value not in allowed_values:
         raise ValueError(f"Choose a supported value for {definition.label}")
     if definition.input_type == "date":
@@ -492,12 +532,21 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         if not missing_questions:
             return RedirectResponse(request.url_for("guest_confirm", token=token), status_code=303)
         field = FIELD_BY_NAME[missing_questions[0]]
+        answer_choices = field.choices
+        if field.name in PORTAL_QUESTION_CONTROLS:
+            answer_choices = _portal_question_choices(root, field.name)
+            if not answer_choices:
+                raise HTTPException(
+                    status_code=409,
+                    detail="The safe portal country catalogue is unavailable; staff must renew it before this answer can be accepted.",
+                )
         return templates.TemplateResponse(
             request,
             "guest_question.html",
             {
                 "case": summary,
                 "field": field,
+                "answer_choices": answer_choices,
                 "question_text": field.question
                 or f"Enter the {field.label.lower()} exactly as shown on the document.",
             },
@@ -520,7 +569,16 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         if not value:
             raise HTTPException(status_code=422, detail="An answer is required")
         try:
-            _validate_candidate_input(field_name, value)
+            portal_choices = _portal_question_choices(root, field_name)
+            if field_name in PORTAL_QUESTION_CONTROLS and not portal_choices:
+                raise ValueError(
+                    "The safe portal country catalogue is unavailable; staff must renew it before this answer can be accepted."
+                )
+            _validate_candidate_input(
+                field_name,
+                value,
+                portal_choices=portal_choices,
+            )
             if field_name == "check_out_date":
                 check_in_value = candidate.value("check_in_date")
                 if check_in_value is None:
