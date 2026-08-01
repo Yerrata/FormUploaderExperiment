@@ -23,6 +23,17 @@ class CaseStatus(StrEnum):
     SUBMITTED_UNVERIFIED = "SUBMITTED_UNVERIFIED"
 
 
+class FillOnlyRunStatus(StrEnum):
+    NOT_STARTED = "NOT_STARTED"
+    PREFLIGHT_FAILED = "PREFLIGHT_FAILED"
+    STARTING = "STARTING"
+    WAITING_FOR_LOGIN = "WAITING_FOR_LOGIN"
+    FILLING = "FILLING"
+    REVIEW = "REVIEW"
+    CLOSED = "CLOSED"
+    FAILED = "FAILED"
+
+
 FieldSource = Literal[
     "passport_dummy",
     "visa_dummy",
@@ -83,6 +94,16 @@ class CaseState(BaseModel):
     status_changed_at: datetime = Field(default_factory=utc_now)
     status_message: str = "Waiting for document photographs"
     attempt: int = 0
+
+
+class FillOnlyRunState(BaseModel):
+    case_id: str
+    status: FillOnlyRunStatus = FillOnlyRunStatus.NOT_STARTED
+    message: str = "Run offline preflight before opening the government portal"
+    updated_at: datetime = Field(default_factory=utc_now)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    operations_filled: int | None = None
 
 
 class EvidenceManifest(BaseModel):

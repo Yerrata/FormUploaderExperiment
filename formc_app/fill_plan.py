@@ -777,6 +777,8 @@ def compile_fill_plan(
 def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> PortalFillPlan:
     """Validate the sealed local inputs and atomically persist a non-executable plan."""
     summary = store.get_summary(case_id)
+    # A failed re-preflight must never leave an older READY plan executable.
+    store.clear_fill_plan(case_id)
     candidate = summary.candidate
     if candidate is None:
         raise ValueError("Candidate Form C is missing")

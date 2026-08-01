@@ -24,14 +24,18 @@ from formc_app.domain import (
     required_candidate_field_names,
 )
 from formc_app.dummy_extraction import DUMMY_PROFILES, extract_dummy
+from formc_app.fill_plan import FillPlanStatus, PortalFillPlan, preflight_case
 from formc_app.models import (
     CandidateField,
     CandidateFormC,
     CaseStatus,
     FilingRequest,
+    FillOnlyRunState,
+    FillOnlyRunStatus,
     MockSubmission,
     utc_now,
 )
+from formc_app.staff_filing import StaffFilingCoordinator, _safe_error_message
 from formc_app.storage import CaseNotFoundError, CaseStore, InvalidGuestTokenError
 
 
@@ -94,6 +98,26 @@ def _candidate_values(candidate: CandidateFormC) -> dict[str, str | None]:
     return {name: candidate.value(name) for name in candidate.fields}
 
 
+def _sealed_fill_plan(
+    store: CaseStore,
+    case_id: str,
+) -> tuple[PortalFillPlan | None, str | None]:
+    case_dir = store.cases_root / case_id
+    if not (case_dir / "fill-plan.json").exists() and not (
+        case_dir / "fill-plan.sha256"
+    ).exists():
+        return None, None
+    try:
+        return (
+            PortalFillPlan.model_validate_json(
+                store.load_sealed_fill_plan_bytes(case_id)
+            ),
+            None,
+        )
+    except (OSError, ValueError) as error:
+        return None, _safe_error_message(error)
+
+
 def _validate_candidate_input(field_name: str, value: str) -> None:
     definition = FIELD_BY_NAME[field_name]
     allowed_values = {choice_value for choice_value, _ in definition.choices}
@@ -114,6 +138,14 @@ def create_app(data_root: Path | None = None) -> FastAPI:
     root = data_root or Path(os.environ.get("FORMC_DATA_DIR", "data"))
     app = FastAPI(title="Yeratta Form C", version="0.1.0")
     app.state.store = CaseStore(root)
+    app.state.staff_filing = StaffFilingCoordinator(
+        store=app.state.store,
+        data_root=root,
+        portal_url=os.environ.get(
+            "FORMC_PORTAL_URL",
+            "https://indianfrro.gov.in/frro/FormC/formc.jsp",
+        ),
+    )
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
     @app.get("/health")
@@ -194,6 +226,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             summary = _store(request).get_summary(case_id)
         except CaseNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Case not found") from exc
+        plan, plan_error = _sealed_fill_plan(_store(request), case_id)
+        coordinator: StaffFilingCoordinator = request.app.state.staff_filing
+        fill_run = coordinator.display_state(case_id)
         return templates.TemplateResponse(
             request,
             "case_detail.html",
@@ -201,7 +236,80 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 "case": summary,
                 "fields": _candidate_display(summary.candidate),
                 "status": CaseStatus,
+                "plan": plan,
+                "plan_error": plan_error,
+                "plan_status": FillPlanStatus,
+                "fill_run": fill_run,
+                "fill_run_active": coordinator.is_active(case_id),
             },
+        )
+
+    @app.post(
+        "/staff/cases/{case_id}/preflight",
+        name="preflight_staff_case",
+    )
+    async def preflight_staff_case(request: Request, case_id: str):
+        store = _store(request)
+        try:
+            store.get_summary(case_id)
+        except CaseNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Case not found") from exc
+        coordinator: StaffFilingCoordinator = request.app.state.staff_filing
+        try:
+            coordinator.require_idle()
+            plan = preflight_case(store=store, data_root=root, case_id=case_id)
+        except (LookupError, OSError, RuntimeError, ValueError) as error:
+            now = utc_now()
+            store.save_fill_only_run(
+                FillOnlyRunState(
+                    case_id=case_id,
+                    status=FillOnlyRunStatus.PREFLIGHT_FAILED,
+                    message=f"Preflight stopped safely: {_safe_error_message(error)}",
+                    updated_at=now,
+                    finished_at=now,
+                )
+            )
+        else:
+            message = (
+                f"READY plan sealed with {len(plan.operations)} fill-only operations"
+                if plan.status == FillPlanStatus.READY
+                else f"Preflight blocked by {len(plan.blockers)} safety check(s)"
+            )
+            store.save_fill_only_run(
+                FillOnlyRunState(case_id=case_id, message=message)
+            )
+        return RedirectResponse(
+            request.url_for("case_detail", case_id=case_id),
+            status_code=303,
+        )
+
+    @app.post(
+        "/staff/cases/{case_id}/fill-only",
+        name="fill_only_staff_case",
+    )
+    async def fill_only_staff_case(request: Request, case_id: str):
+        store = _store(request)
+        try:
+            store.get_summary(case_id)
+        except CaseNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Case not found") from exc
+        coordinator: StaffFilingCoordinator = request.app.state.staff_filing
+        try:
+            coordinator.launch(case_id)
+        except (LookupError, OSError, RuntimeError, ValueError) as error:
+            now = utc_now()
+            store.save_fill_only_run(
+                FillOnlyRunState(
+                    case_id=case_id,
+                    status=FillOnlyRunStatus.FAILED,
+                    message=f"Fill-only did not start: {_safe_error_message(error)}",
+                    updated_at=now,
+                    finished_at=now,
+                )
+            )
+        return RedirectResponse(
+            request.url_for("case_detail", case_id=case_id),
+            status_code=303,
         )
 
     @app.post("/staff/cases/{case_id}/run", name="run_case")
