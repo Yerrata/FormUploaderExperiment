@@ -3,8 +3,8 @@
 {% block header_action %}<span class="secure-pill">One guest only</span>{% endblock %}
 {% block content %}
 <span class="eyebrow">Step 2 of 4</span>
-<h1>What we read from your photographs</h1>
-<p class="lead">These particulars will be used for Form C. If anything is wrong, type the correct value.</p>
+<h1>Details already filled from your documents</h1>
+<p class="lead">Check these details. You only need to type when a value is wrong.</p>
 <form method="post" class="review-fields">
   {% for definition, field in fields %}
   <label class="review-field">
@@ -18,7 +18,7 @@
     {% else %}
     <input type="{{ definition.input_type }}" name="{{ definition.name }}" value="{{ field.value or '' }}" required>
     {% endif %}
-    <em>Tap and type only if incorrect</em>
+    <em>Already filled · change only if incorrect</em>
   </label>
   {% endfor %}
   <button class="primary full" type="submit">These details are correct</button>

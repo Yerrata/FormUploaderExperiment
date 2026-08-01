@@ -60,7 +60,7 @@ FORM_FIELDS = (
     FormField(
         "permanent_address",
         "Permanent address",
-        "What is your address in the country where you permanently reside?",
+        "What is your permanent home address?",
     ),
     FormField(
         "permanent_city",
@@ -163,8 +163,15 @@ FORM_FIELDS = (
 
 FIELD_BY_NAME = {field.name: field for field in FORM_FIELDS}
 REQUIRED_FIELD_NAMES = tuple(field.name for field in FORM_FIELDS)
+PASSPORT_PREFILL_FIELD_NAMES = (
+    "permanent_address",
+    "permanent_city",
+    "permanent_country",
+)
 EXTRACTED_FIELD_NAMES = tuple(
-    field.name for field in FORM_FIELDS if field.critical
+    field.name
+    for field in FORM_FIELDS
+    if field.critical or field.name in PASSPORT_PREFILL_FIELD_NAMES
 )
 QUESTION_FIELD_NAMES = tuple(
     field.name for field in FORM_FIELDS if field.question is not None
