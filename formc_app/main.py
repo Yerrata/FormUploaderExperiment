@@ -24,7 +24,7 @@ from formc_app.domain import (
     required_candidate_field_names,
 )
 from formc_app.dummy_extraction import DUMMY_PROFILES, extract_dummy
-from formc_app.fill_plan import FillPlanStatus, PortalFillPlan, preflight_case
+from formc_app.fill_plan import PortalFillPlan, prepare_fill_plan
 from formc_app.models import (
     CandidateField,
     CandidateFormC,
@@ -156,13 +156,18 @@ def _validate_candidate_input(
     value: str,
     *,
     portal_choices: tuple[tuple[str, str], ...] = (),
-) -> None:
+) -> str:
     definition = FIELD_BY_NAME[field_name]
-    allowed_values = {
-        choice_value for choice_value, _ in (portal_choices or definition.choices)
-    }
-    if allowed_values and value not in allowed_values:
-        raise ValueError(f"Choose a supported value for {definition.label}")
+    choices = portal_choices or definition.choices
+    if choices:
+        matches = {
+            choice_value
+            for choice_value, choice_label in choices
+            if value.casefold() in {choice_value.casefold(), choice_label.casefold()}
+        }
+        if len(matches) != 1:
+            raise ValueError(f"Choose a supported value for {definition.label}")
+        value = matches.pop()
     if definition.input_type == "date":
         try:
             date.fromisoformat(value)
@@ -172,6 +177,7 @@ def _validate_candidate_input(
         r"(?:[01]\d|2[0-3]):[0-5]\d", value
     ):
         raise ValueError(f"Enter a valid 24-hour time for {definition.label}")
+    return value
 
 
 def create_app(data_root: Path | None = None) -> FastAPI:
@@ -278,49 +284,9 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 "status": CaseStatus,
                 "plan": plan,
                 "plan_error": plan_error,
-                "plan_status": FillPlanStatus,
                 "fill_run": fill_run,
                 "fill_run_active": coordinator.is_active(case_id),
             },
-        )
-
-    @app.post(
-        "/staff/cases/{case_id}/preflight",
-        name="preflight_staff_case",
-    )
-    async def preflight_staff_case(request: Request, case_id: str):
-        store = _store(request)
-        try:
-            store.get_summary(case_id)
-        except CaseNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="Case not found") from exc
-        coordinator: StaffFilingCoordinator = request.app.state.staff_filing
-        try:
-            coordinator.require_idle()
-            plan = preflight_case(store=store, data_root=root, case_id=case_id)
-        except (LookupError, OSError, RuntimeError, ValueError) as error:
-            now = utc_now()
-            store.save_fill_only_run(
-                FillOnlyRunState(
-                    case_id=case_id,
-                    status=FillOnlyRunStatus.PREFLIGHT_FAILED,
-                    message=f"Preflight stopped safely: {_safe_error_message(error)}",
-                    updated_at=now,
-                    finished_at=now,
-                )
-            )
-        else:
-            message = (
-                f"READY plan sealed with {len(plan.operations)} fill-only operations"
-                if plan.status == FillPlanStatus.READY
-                else f"Preflight blocked by {len(plan.blockers)} safety check(s)"
-            )
-            store.save_fill_only_run(
-                FillOnlyRunState(case_id=case_id, message=message)
-            )
-        return RedirectResponse(
-            request.url_for("case_detail", case_id=case_id),
-            status_code=303,
         )
 
     @app.post(
@@ -335,6 +301,8 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Case not found") from exc
         coordinator: StaffFilingCoordinator = request.app.state.staff_filing
         try:
+            coordinator.require_idle()
+            prepare_fill_plan(store=store, data_root=root, case_id=case_id)
             coordinator.launch(case_id)
         except (LookupError, OSError, RuntimeError, ValueError) as error:
             now = utc_now()
@@ -500,7 +468,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             if not new_value:
                 raise HTTPException(status_code=422, detail=f"{FIELD_BY_NAME[name].label} is required")
             try:
-                _validate_candidate_input(name, new_value)
+                new_value = _validate_candidate_input(name, new_value)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             if new_value != current.value:
@@ -574,7 +542,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 raise ValueError(
                     "The safe portal country catalogue is unavailable; staff must renew it before this answer can be accepted."
                 )
-            _validate_candidate_input(
+            value = _validate_candidate_input(
                 field_name,
                 value,
                 portal_choices=portal_choices,

@@ -224,16 +224,10 @@ def test_executor_fills_and_uploads_from_the_sealed_ready_plan(
     monkeypatch,
 ):
     store, catalogue, plan = _executor_case(tmp_path)
+    (tmp_path / "portal-controls.json").unlink()
+    (tmp_path / "property.json").unlink()
     page = FakePage()
     monkeypatch.setattr("formc_app.portal_fill.is_authenticated_form_c", lambda _page: True)
-    monkeypatch.setattr(
-        "formc_app.portal_fill.catalogue_page_controls",
-        lambda _page: catalogue.controls,
-    )
-    monkeypatch.setattr(
-        "formc_app.portal_fill.compile_fill_plan",
-        lambda **_kwargs: plan,
-    )
 
     result = PortalFillExecutor(store=store, data_root=tmp_path).execute(
         page, plan.case_id
@@ -252,6 +246,34 @@ def test_executor_fills_and_uploads_from_the_sealed_ready_plan(
         store.document_path(plan.case_id, "documents/guest_photo.jpg")
     )
     assert all("pmsbmt" not in action[1] for action in page.actions)
+
+
+def test_executor_reports_the_exact_operation_the_live_page_rejects(
+    tmp_path: Path,
+    monkeypatch,
+):
+    store, _catalogue, plan = _executor_case(tmp_path)
+    destination = next(
+        operation
+        for operation in plan.operations
+        if operation.source_field == "candidate.next_destination_city"
+    )
+    destination.value = "Unknown district"
+    store.save_fill_plan(plan.case_id, plan)
+    monkeypatch.setattr("formc_app.portal_fill.is_authenticated_form_c", lambda _page: True)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Could not fill candidate.next_destination_city into "
+            "applicant_next_destination_city_district_IN"
+        ),
+    ):
+        PortalFillExecutor(
+            store=store,
+            data_root=tmp_path,
+            runtime_option_timeout_ms=0,
+        ).execute(FakePage(), plan.case_id)
 
 
 def test_executor_rejects_a_fill_plan_changed_after_sealing(tmp_path: Path):

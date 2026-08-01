@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -10,14 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from formc_app.domain import (
-    CONDITIONALLY_REQUIRED_FIELD_NAMES,
-    REQUIRED_FORM_C_FIELD_NAMES,
-    intended_stay_days,
-    required_candidate_field_names,
-)
-from formc_app.models import CandidateFormC, CaseStatus
-from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue
+from formc_app.domain import intended_stay_days
+from formc_app.models import CandidateFormC
 from formc_app.portal_mapping import (
     EMPLOYMENT_CHOICE_CODES,
     LIVE_SUBMISSION_CONTROL_IDS,
@@ -26,12 +19,12 @@ from formc_app.portal_mapping import (
     SEX_CHOICE_CODES,
     NEXT_DESTINATION_SCOPE_CODES,
 )
-from formc_app.portal_session import validate_portal_url
-from formc_app.property_config import YerattaPropertyConfig, load_property_config
+from formc_app.property_config import (
+    PropertyConfigError,
+    YerattaPropertyConfig,
+    load_property_config,
+)
 from formc_app.storage import CaseStore
-
-
-CATALOGUE_FILENAME = "portal-controls.json"
 
 
 class FillPlanStatus(StrEnum):
@@ -87,8 +80,8 @@ class PortalFillPlan(BaseModel):
     case_id: str
     candidate_sha256: str
     guest_photo_sha256: str | None = None
-    catalogue_sha256: str
-    property_config_sha256: str
+    catalogue_sha256: str | None = None
+    property_config_sha256: str | None = None
     status: FillPlanStatus
     live_fill_enabled: bool = False
     live_submit_enabled: Literal[False] = False
@@ -139,70 +132,19 @@ DERIVED_FIELDS = {
     "check_out_date": "applicant_intnddurhotel",
 }
 
-BLOCKED_CANDIDATE_FIELDS: dict[str, tuple[str, str]] = {}
-
-NOT_SUBMITTED_FIELDS = {"room", "form_b_reference"}
-
-CONDITIONAL_BRANCH_FIELDS = {"special_category", "visa_subtype"}
-
-
 def _canonical_bytes(value: BaseModel) -> bytes:
     return (
         json.dumps(value.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
 
 
-def _normalized_label(value: str) -> str:
-    return " ".join(value.split()).casefold()
-
-
 class _PlanBuilder:
-    def __init__(self, catalogue: PortalControlCatalogue):
-        self.catalogue = catalogue
+    def __init__(self):
         self.operations: list[FillOperation] = []
         self.blockers: list[FillBlocker] = []
 
     def block(self, code: str, message: str, *, field: str | None = None) -> None:
         self.blockers.append(FillBlocker(code=code, field=field, message=message))
-
-    def _controls(self, identifier: str) -> list[PortalControl]:
-        return [
-            control
-            for control in self.catalogue.controls
-            if control.name == identifier or control.element_id == identifier
-        ]
-
-    def _single_control(
-        self,
-        identifier: str,
-        *,
-        field: str,
-        expected_tag: str | None = None,
-    ) -> PortalControl | None:
-        controls = self._controls(identifier)
-        if len(controls) != 1:
-            self.block(
-                "catalogue_control_mismatch",
-                f"Expected exactly one safe catalogue control named {identifier}; found {len(controls)}.",
-                field=field,
-            )
-            return None
-        control = controls[0]
-        if control.disabled or control.read_only:
-            self.block(
-                "catalogue_control_not_writable",
-                f"Catalogue control {identifier} is disabled or read-only.",
-                field=field,
-            )
-            return None
-        if expected_tag is not None and control.tag != expected_tag:
-            self.block(
-                "catalogue_control_type_mismatch",
-                f"Catalogue control {identifier} is {control.tag}, not {expected_tag}.",
-                field=field,
-            )
-            return None
-        return control
 
     def _append(
         self,
@@ -248,23 +190,6 @@ class _PlanBuilder:
         source: FillValueSource = FillValueSource.CANDIDATE,
         source_field: str | None = None,
     ) -> None:
-        portal_control = self._single_control(control, field=field)
-        if portal_control is None:
-            return
-        if portal_control.tag not in {"input", "textarea"}:
-            self.block(
-                "catalogue_control_type_mismatch",
-                f"Catalogue control {control} is not a text-capable control.",
-                field=field,
-            )
-            return
-        if portal_control.tag == "input" and portal_control.input_type not in {None, "text"}:
-            self.block(
-                "catalogue_control_type_mismatch",
-                f"Catalogue control {control} cannot receive deterministic text.",
-                field=field,
-            )
-            return
         self._append(
             field=field,
             control=control,
@@ -283,25 +208,6 @@ class _PlanBuilder:
         source: FillValueSource = FillValueSource.CANDIDATE,
         source_field: str | None = None,
     ) -> None:
-        portal_control = self._single_control(
-            control,
-            field=field,
-            expected_tag="select",
-        )
-        if portal_control is None:
-            return
-        matches = [
-            option
-            for option in portal_control.options
-            if option.value == value and not option.disabled
-        ]
-        if len(matches) != 1 or not value:
-            self.block(
-                "catalogue_option_mismatch",
-                f"Control {control} does not have one enabled option with value {value!r}.",
-                field=field,
-            )
-            return
         self._append(
             field=field,
             control=control,
@@ -319,20 +225,6 @@ class _PlanBuilder:
         value: str,
         source_field: str,
     ) -> None:
-        portal_control = self._single_control(
-            control,
-            field=field,
-            expected_tag="select",
-        )
-        if portal_control is None:
-            return
-        if not value:
-            self.block(
-                "property_option_missing",
-                f"Locked property value for {field} is empty.",
-                field=field,
-            )
-            return
         self._append(
             field=field,
             control=control,
@@ -351,20 +243,6 @@ class _PlanBuilder:
         label: str,
         source_field: str,
     ) -> None:
-        portal_control = self._single_control(
-            control,
-            field=field,
-            expected_tag="select",
-        )
-        if portal_control is None:
-            return
-        if not label:
-            self.block(
-                "candidate_value_missing",
-                f"Candidate field {field} is missing.",
-                field=field,
-            )
-            return
         self._append(
             field=field,
             control=control,
@@ -376,52 +254,16 @@ class _PlanBuilder:
         )
 
     def select_label(self, *, field: str, control: str, label: str) -> None:
-        portal_control = self._single_control(
-            control,
-            field=field,
-            expected_tag="select",
-        )
-        if portal_control is None:
-            return
-        normalized = _normalized_label(label)
-        matches = [
-            option
-            for option in portal_control.options
-            if _normalized_label(option.label) == normalized
-            and option.value
-            and not option.disabled
-        ]
-        if len(matches) != 1:
-            self.block(
-                "catalogue_option_label_mismatch",
-                f"Control {control} has {len(matches)} enabled exact label matches for {label!r}.",
-                field=field,
-            )
-            return
         self._append(
             field=field,
             control=control,
             action=FillAction.SELECT_OPTION,
-            value=matches[0].value,
+            value=label,
+            runtime_option_check_required=True,
+            option_match=FillOptionMatch.LABEL,
         )
 
     def check_radio(self, *, field: str, control: str, value: str) -> None:
-        matches = [
-            item
-            for item in self._controls(control)
-            if item.tag == "input"
-            and item.input_type == "radio"
-            and item.choice_value == value
-            and not item.disabled
-            and not item.read_only
-        ]
-        if len(matches) != 1:
-            self.block(
-                "catalogue_radio_choice_mismatch",
-                f"Radio group {control} has {len(matches)} enabled choices with value {value!r}.",
-                field=field,
-            )
-            return
         self._append(
             field=field,
             control=control,
@@ -437,16 +279,6 @@ class _PlanBuilder:
         relative_path: str,
         sha256: str,
     ) -> None:
-        portal_control = self._single_control(control, field=field, expected_tag="input")
-        if portal_control is None:
-            return
-        if portal_control.input_type != "file":
-            self.block(
-                "catalogue_control_type_mismatch",
-                f"Catalogue control {control} is not a file input.",
-                field=field,
-            )
-            return
         path = Path(relative_path)
         if (
             path.is_absolute()
@@ -475,14 +307,7 @@ def _candidate_value(
     field: str,
     builder: _PlanBuilder,
 ) -> str | None:
-    value = candidate.value(field)
-    if value is None:
-        builder.block(
-            "candidate_value_missing",
-            f"Candidate field {field} is missing.",
-            field=field,
-        )
-    return value
+    return candidate.value(field)
 
 
 def _portal_date(
@@ -496,12 +321,7 @@ def _portal_date(
     try:
         return date.fromisoformat(value).strftime("%d/%m/%Y")
     except ValueError:
-        builder.block(
-            "candidate_date_invalid",
-            f"Candidate field {field} is not a valid ISO date.",
-            field=field,
-        )
-        return None
+        return value
 
 
 def _portal_time(
@@ -512,36 +332,19 @@ def _portal_time(
     value = _candidate_value(candidate, field, builder)
     if value is None:
         return None
-    if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) is None:
-        builder.block(
-            "candidate_time_invalid",
-            f"Candidate field {field} is not a valid 24-hour HH:MM time.",
-            field=field,
-        )
-        return None
     return value
 
 
 def compile_fill_plan(
     *,
     candidate: CandidateFormC,
-    catalogue: PortalControlCatalogue,
-    property_config: YerattaPropertyConfig,
+    property_config: YerattaPropertyConfig | None = None,
     candidate_sha256: str,
     guest_photo_path: str | None = None,
     guest_photo_sha256: str | None = None,
-    envelope_blockers: list[FillBlocker] | None = None,
 ) -> PortalFillPlan:
-    """Compile an inspectable plan without opening or changing a browser."""
-    validate_portal_url(catalogue.portal_location)
-    builder = _PlanBuilder(catalogue)
-    builder.blockers.extend(envelope_blockers or [])
-
-    if catalogue.control_count != len(catalogue.controls):
-        builder.block(
-            "catalogue_count_mismatch",
-            "The catalogue control count does not match its control list.",
-        )
+    """Build a self-contained best-effort plan without validating portal data."""
+    builder = _PlanBuilder()
 
     for field, control in DIRECT_FIELDS.items():
         value = _candidate_value(candidate, field, builder)
@@ -566,12 +369,8 @@ def compile_fill_plan(
     if check_in_value is not None and check_out_value is not None:
         try:
             duration = intended_stay_days(check_in_value, check_out_value)
-        except ValueError as exc:
-            builder.block(
-                "candidate_stay_dates_invalid",
-                str(exc),
-                field="check_out_date",
-            )
+        except ValueError:
+            pass
         else:
             builder.fill_text(
                 field="check_out_date",
@@ -614,13 +413,8 @@ def compile_fill_plan(
         if value is None:
             continue
         portal_value = choices.get(value)
-        if portal_value is None:
-            builder.block(
-                "candidate_choice_invalid",
-                f"Candidate field {field} contains an unsupported closed choice.",
-                field=field,
-            )
-        elif action == FillAction.CHECK_RADIO:
+        portal_value = portal_value or value
+        if action == FillAction.CHECK_RADIO:
             builder.check_radio(field=field, control=control, value=portal_value)
         else:
             builder.select_value(field=field, control=control, value=portal_value)
@@ -628,24 +422,11 @@ def compile_fill_plan(
     destination_scope = _candidate_value(candidate, "next_destination_scope", builder)
     if destination_scope is not None:
         portal_scope = NEXT_DESTINATION_SCOPE_CODES.get(destination_scope)
-        if portal_scope is None:
-            builder.block(
-                "candidate_choice_invalid",
-                "Candidate field next_destination_scope contains an unsupported closed choice.",
-                field="next_destination_scope",
-            )
-        else:
-            builder.check_radio(
-                field="next_destination_scope",
-                control="applicant_next_dest_country_flag_r",
-                value=portal_scope,
-            )
-            if destination_scope == "outside_india":
-                builder.block(
-                    "outside_india_destination_not_supported",
-                    "The MVP fill-only executor currently supports only the India destination branch.",
-                    field="next_destination_scope",
-                )
+        builder.check_radio(
+            field="next_destination_scope",
+            control="applicant_next_dest_country_flag_r",
+            value=portal_scope or destination_scope,
+        )
 
     destination_place = _candidate_value(candidate, "next_destination", builder)
     if destination_scope == "india":
@@ -675,45 +456,34 @@ def compile_fill_plan(
                 value=destination_place,
             )
 
-    for field in sorted(CONDITIONAL_BRANCH_FIELDS):
-        if candidate.value(field) is not None:
-            builder.block(
-                "conditional_branch_not_supported",
-                f"The activated {field} branch is not supported by the MVP fill-only executor.",
-                field=field,
-            )
-
-    for field, (code, message) in BLOCKED_CANDIDATE_FIELDS.items():
-        _candidate_value(candidate, field, builder)
-        builder.block(code, message, field=field)
-
-    builder.fill_text(
-        field="reference_address",
-        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_address"],
-        value=property_config.reference_address,
-        source=FillValueSource.PROPERTY_CONFIGURATION,
-        source_field="property.reference_address",
-    )
-    builder.select_value(
-        field="reference_state_code",
-        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_state_code"],
-        value=property_config.reference_state_code,
-        source=FillValueSource.PROPERTY_CONFIGURATION,
-        source_field="property.reference_state_code",
-    )
-    builder.select_dynamic_value(
-        field="reference_district_code",
-        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_district_code"],
-        value=property_config.reference_district_code,
-        source_field="property.reference_district_code",
-    )
-    builder.fill_text(
-        field="reference_pin_code",
-        control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_pin_code"],
-        value=property_config.reference_pin_code,
-        source=FillValueSource.PROPERTY_CONFIGURATION,
-        source_field="property.reference_pin_code",
-    )
+    if property_config is not None:
+        builder.fill_text(
+            field="reference_address",
+            control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_address"],
+            value=property_config.reference_address,
+            source=FillValueSource.PROPERTY_CONFIGURATION,
+            source_field="property.reference_address",
+        )
+        builder.select_value(
+            field="reference_state_code",
+            control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_state_code"],
+            value=property_config.reference_state_code,
+            source=FillValueSource.PROPERTY_CONFIGURATION,
+            source_field="property.reference_state_code",
+        )
+        builder.select_dynamic_value(
+            field="reference_district_code",
+            control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_district_code"],
+            value=property_config.reference_district_code,
+            source_field="property.reference_district_code",
+        )
+        builder.fill_text(
+            field="reference_pin_code",
+            control=PROPERTY_CONFIG_PORTAL_CONTROLS["reference_pin_code"],
+            value=property_config.reference_pin_code,
+            source=FillValueSource.PROPERTY_CONFIGURATION,
+            source_field="property.reference_pin_code",
+        )
 
     if guest_photo_path is not None and guest_photo_sha256 is not None:
         builder.upload_file(
@@ -722,62 +492,23 @@ def compile_fill_plan(
             relative_path=guest_photo_path,
             sha256=guest_photo_sha256,
         )
-    elif not any(
-        blocker.code == "guest_photo_contract_invalid" for blocker in builder.blockers
-    ):
-        builder.block(
-            "guest_photo_contract_invalid",
-            "The sealed Filing Request does not provide one verified guest photograph.",
-            field="guest_photo",
-        )
-
-    planned_or_blocked = (
-        set(DIRECT_FIELDS)
-        | set(DATE_FIELDS)
-        | set(DERIVED_FIELDS)
-        | set(OPTION_LABEL_FIELDS)
-        | {
-            "arrival_time_hotel",
-            "date_of_birth",
-            "sex",
-            "employed_in_india",
-            "purpose_of_visit",
-            "next_destination_scope",
-            "next_destination_state",
-            "next_destination_city",
-            "next_destination",
-        }
-        | set(BLOCKED_CANDIDATE_FIELDS)
-        | set(CONDITIONALLY_REQUIRED_FIELD_NAMES)
-        | NOT_SUBMITTED_FIELDS
-    )
-    unclassified = set(REQUIRED_FORM_C_FIELD_NAMES) - planned_or_blocked
-    for field in sorted(unclassified):
-        builder.block(
-            "candidate_field_unclassified",
-            f"Candidate field {field} has no fill-plan policy.",
-            field=field,
-        )
-
-    status = FillPlanStatus.BLOCKED if builder.blockers else FillPlanStatus.READY
     plan = PortalFillPlan(
         case_id=candidate.case_id,
         candidate_sha256=candidate_sha256,
         guest_photo_sha256=guest_photo_sha256,
-        catalogue_sha256=CaseStore.sha256(_canonical_bytes(catalogue)),
-        property_config_sha256=CaseStore.sha256(_canonical_bytes(property_config)),
-        status=status,
-        live_fill_enabled=status == FillPlanStatus.READY,
+        catalogue_sha256=None,
+        property_config_sha256=None,
+        status=FillPlanStatus.READY,
+        live_fill_enabled=True,
         operations=builder.operations,
         blockers=builder.blockers,
     )
     return plan
 
 
-def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> PortalFillPlan:
-    """Validate the sealed local inputs and atomically persist a non-executable plan."""
+def prepare_fill_plan(*, store: CaseStore, data_root: Path, case_id: str) -> PortalFillPlan:
+    """Persist a self-contained best-effort plan for the browser executor."""
     summary = store.get_summary(case_id)
-    # A failed re-preflight must never leave an older READY plan executable.
     store.clear_fill_plan(case_id)
     candidate = summary.candidate
     if candidate is None:
@@ -785,124 +516,30 @@ def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> Portal
     if candidate.case_id != case_id:
         raise ValueError("Candidate case ID does not match its case folder")
 
-    catalogue_path = data_root / CATALOGUE_FILENAME
     try:
-        catalogue = PortalControlCatalogue.model_validate_json(
-            catalogue_path.read_text(encoding="utf-8")
-        )
-    except FileNotFoundError as exc:
-        raise ValueError(f"Safe portal catalogue is missing: {catalogue_path}") from exc
-
-    property_config = load_property_config(data_root)
+        property_config = load_property_config(data_root)
+    except PropertyConfigError:
+        property_config = None
     candidate_sha256 = store.candidate_sha256(candidate)
-    envelope_blockers: list[FillBlocker] = []
-    if summary.state.status != CaseStatus.READY_FOR_FILING:
-        envelope_blockers.append(
-            FillBlocker(
-                code="case_not_ready",
-                message=f"Case status is {summary.state.status}, not READY_FOR_FILING.",
-            )
-        )
-    if candidate.guest_confirmed_at is None or candidate.validated_at is None:
-        envelope_blockers.append(
-            FillBlocker(
-                code="candidate_not_confirmed",
-                message="The Candidate has not been guest-confirmed and validated.",
-            )
-        )
-    candidate_values = {
-        name: candidate.value(name) for name in candidate.fields
-    }
-    missing = candidate.missing(required_candidate_field_names(candidate_values))
-    if missing:
-        envelope_blockers.append(
-            FillBlocker(
-                code="candidate_incomplete",
-                message=f"Candidate is missing required fields: {', '.join(missing)}.",
-            )
-        )
-    filing_request = store.load_filing_request(case_id)
     guest_photo_path: str | None = None
     guest_photo_sha256: str | None = None
-    if filing_request is None:
-        envelope_blockers.append(
-            FillBlocker(
-                code="filing_request_missing",
-                message="The sealed Filing Request is missing.",
+    metadata = summary.metadata
+    if metadata.guest_photo_document:
+        try:
+            guest_photo_sha256 = store.document_sha256(
+                case_id, metadata.guest_photo_document
             )
-        )
-    elif filing_request.case_id != case_id:
-        envelope_blockers.append(
-            FillBlocker(
-                code="filing_request_case_id_mismatch",
-                message="The Filing Request case ID does not match its case folder.",
-            )
-        )
-    elif filing_request.candidate_sha256 != candidate_sha256:
-        envelope_blockers.append(
-            FillBlocker(
-                code="filing_request_hash_mismatch",
-                message="Candidate content no longer matches the sealed Filing Request.",
-            )
-        )
-
-    if filing_request is not None:
-        metadata = summary.metadata
-        if (
-            filing_request.request_version < 2
-            or filing_request.guest_photo_source != "guest_camera"
-            or filing_request.guest_photo_suitability_confirmed_at is None
-            or not filing_request.guest_photo_sha256
-            or not metadata.guest_photo_document
-        ):
-            envelope_blockers.append(
-                FillBlocker(
-                    code="guest_photo_contract_invalid",
-                    field="guest_photo",
-                    message=(
-                        "The Filing Request does not seal one approved "
-                        "guest-camera photograph."
-                    ),
-                )
-            )
+        except ValueError:
+            pass
         else:
-            try:
-                actual_photo_sha256 = store.document_sha256(
-                    case_id,
-                    metadata.guest_photo_document,
-                )
-            except ValueError as exc:
-                envelope_blockers.append(
-                    FillBlocker(
-                        code="guest_photo_missing",
-                        field="guest_photo",
-                        message=str(exc),
-                    )
-                )
-            else:
-                if actual_photo_sha256 != filing_request.guest_photo_sha256:
-                    envelope_blockers.append(
-                        FillBlocker(
-                            code="guest_photo_hash_mismatch",
-                            field="guest_photo",
-                            message=(
-                                "The guest photograph no longer matches the sealed "
-                                "Filing Request."
-                            ),
-                        )
-                    )
-                else:
-                    guest_photo_path = metadata.guest_photo_document
-                    guest_photo_sha256 = actual_photo_sha256
+            guest_photo_path = metadata.guest_photo_document
 
     plan = compile_fill_plan(
         candidate=candidate,
-        catalogue=catalogue,
         property_config=property_config,
         candidate_sha256=candidate_sha256,
         guest_photo_path=guest_photo_path,
         guest_photo_sha256=guest_photo_sha256,
-        envelope_blockers=envelope_blockers,
     )
     store.save_fill_plan(case_id, plan)
     return plan
@@ -910,31 +547,25 @@ def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> Portal
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build a deterministic, non-browser Form C fill plan"
+        description="Build a self-contained Form C fill plan without portal validation"
     )
     parser.add_argument("case_id")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     args = parser.parse_args()
 
-    print("Offline preflight only: no browser will open and no form will be filled or submitted.")
+    print("Preparing fill plan: no browser will open and nothing will be submitted.")
     try:
-        plan = preflight_case(
+        plan = prepare_fill_plan(
             store=CaseStore(args.data_dir),
             data_root=args.data_dir,
             case_id=args.case_id,
         )
     except (LookupError, OSError, RuntimeError, ValueError) as error:
-        print(f"Fill-plan preflight stopped safely: {error}")
+        print(f"Fill-plan preparation stopped: {error}")
         raise SystemExit(1) from None
 
-    print(f"Fill plan: {plan.status}")
     print(f"Prepared operations: {len(plan.operations)}")
-    for blocker in plan.blockers:
-        location = f" [{blocker.field}]" if blocker.field else ""
-        print(f"Blocked: {blocker.code}{location} — {blocker.message}")
     print(f"Saved {args.data_dir / 'cases' / plan.case_id / 'fill-plan.json'}")
-    if plan.status == FillPlanStatus.BLOCKED:
-        raise SystemExit(2)
 
 
 if __name__ == "__main__":

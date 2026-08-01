@@ -17,21 +17,15 @@
       <div class="panel-body">
         <ol class="timeline">
           <li class="{% if case.state.status.value in ['GUEST_CAPTURE','GUEST_REVIEW','NEEDS_ANSWERS'] %}current{% endif %}"><span>1</span><b>Guest supplies and confirms details</b></li>
-          <li class="{% if case.state.status == status.READY_FOR_FILING and not plan %}current{% endif %}"><span>2</span><b>Run safe offline preflight</b></li>
-          <li class="{% if plan and plan.status == plan_status.READY %}current{% endif %}"><span>3</span><b>Open government form and fill</b></li>
-          <li class="{% if fill_run.status.value == 'REVIEW' %}current{% endif %}"><span>4</span><b>Staff reviews before submission</b></li>
+          <li class="{% if case.state.status == status.READY_FOR_FILING %}current{% endif %}"><span>2</span><b>Open government form and fill</b></li>
+          <li class="{% if fill_run.status.value == 'REVIEW' %}current{% endif %}"><span>3</span><b>Staff reviews before submission</b></li>
         </ol>
 
         {% if case.state.status == status.READY_FOR_FILING %}
         <div class="action-stack">
-          <form method="post" action="{{ request.url_for('preflight_staff_case', case_id=case.metadata.case_id) }}">
-            <button class="secondary full" type="submit" {% if fill_run_active %}disabled{% endif %}>{% if plan %}Re-run safe preflight{% else %}Run safe preflight{% endif %}</button>
-          </form>
-          {% if plan and plan.status == plan_status.READY %}
           <form method="post" action="{{ request.url_for('fill_only_staff_case', case_id=case.metadata.case_id) }}">
             <button class="primary full" type="submit" {% if fill_run_active %}disabled{% endif %}>{% if fill_run_active %}Government portal is open{% else %}Open portal and fill Form C{% endif %}</button>
           </form>
-          {% endif %}
         </div>
         {% endif %}
         {% if case.state.status == status.GUEST_CAPTURE %}<a class="primary full button" href="{{ request.url_for('case_handoff', case_id=case.metadata.case_id) }}">Open guest handoff</a>{% endif %}
@@ -39,15 +33,14 @@
     </div>
 
     <div class="panel">
-      <div class="panel-head"><div><span class="eyebrow">Safety gate</span><h2>Fill plan</h2></div>{% if plan %}<span class="plan-badge plan-{{ plan.status.value|lower }}">{{ plan.status.value }}</span>{% endif %}</div>
+      <div class="panel-head"><div><span class="eyebrow">Execution data</span><h2>Fill plan</h2></div></div>
       <div class="panel-body plan-body">
         {% if plan_error %}
         <div class="error-box"><b>Plan seal is invalid</b><span>{{ plan_error }}</span></div>
         {% elif plan %}
-        <p>{{ plan.operations|length }} prepared operations · submission disabled</p>
-        {% if plan.blockers %}<ul class="blocker-list">{% for blocker in plan.blockers %}<li><b>{{ blocker.field or blocker.code }}</b><span>{{ blocker.message }}</span></li>{% endfor %}</ul>{% else %}<div class="notice"><b>READY</b><span>The sealed plan is blocker-free and may drive fill-only automation.</span></div>{% endif %}
+        <p>{{ plan.operations|length }} operations copied into one sealed plan · automatic submission disabled</p>
         {% else %}
-        <p>No fill plan exists yet. Preflight is offline and does not open or change the government portal.</p>
+        <p>The fill plan will be created automatically when staff opens the government portal.</p>
         {% endif %}
       </div>
     </div>
@@ -61,7 +54,7 @@
       <span class="eyebrow">Official government portal</span>
       <h2>Form C opens in a separate Chromium window</h2>
       <p>Login and CAPTCHA stay inside that dedicated browser. The Yeratta app receives no government password and has no submit action.</p>
-      <ol class="portal-steps"><li>Run preflight until the plan is READY.</li><li>Choose Open portal and fill Form C.</li><li>Complete normal login and CAPTCHA if asked.</li><li>Review the filled form and submit it manually only when it is correct.</li></ol>
+      <ol class="portal-steps"><li>Choose Open portal and fill Form C.</li><li>Complete normal login and CAPTCHA if asked.</li><li>The worker fills each planned control in order.</li><li>Review the filled form and submit it manually only when it is correct.</li></ol>
     </div>
     <div class="run-panel run-{{ fill_run.status.value|lower }}">
       <span class="eyebrow">Fill-only run</span>
