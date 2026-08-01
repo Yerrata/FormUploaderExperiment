@@ -65,7 +65,7 @@ class StaffFilingCoordinator:
 
     def launch(self, case_id: str) -> None:
         executor = PortalFillExecutor(store=self.store, data_root=self.data_root)
-        # Verify the sealed READY gate synchronously before any browser thread starts.
+        # Verify only the sealed execution contract before opening the browser.
         executor.load_verified_plan(case_id)
         with self._lock:
             if self._active_case_id is not None:

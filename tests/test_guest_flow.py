@@ -4,6 +4,7 @@ from datetime import date, time, timedelta
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -379,6 +380,43 @@ def test_closed_guest_choice_rejects_an_unknown_value(tmp_path: Path):
         data={"field_name": "arrival_time_hotel", "answer": "25:90"},
     )
     assert unsupported_arrival_time_question.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("submitted_answer", "stored_value"),
+    (("Yes", "yes"), ("No", "no")),
+)
+def test_employment_choice_labels_are_stored_as_canonical_values(
+    tmp_path: Path,
+    submitted_answer: str,
+    stored_value: str,
+):
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+    client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
+    )
+    candidate = app.state.store.load_candidate(created.metadata.case_id)
+    assert candidate is not None
+    review_values = {name: candidate.value(name) for name in EXTRACTED_FIELD_NAMES}
+    assert client.post(f"/guest/{token}/review", data=review_values).status_code == 303
+
+    response = client.post(
+        f"/guest/{token}/question",
+        data={
+            "field_name": "employed_in_india",
+            "answer": submitted_answer,
+        },
+    )
+
+    assert response.status_code == 303
+    updated = app.state.store.load_candidate(created.metadata.case_id)
+    assert updated is not None
+    assert updated.value("employed_in_india") == stored_value
 
 
 def test_missing_document_and_missing_answer_block_progress(tmp_path: Path):

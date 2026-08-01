@@ -11,9 +11,9 @@ Stage 1 is a local-first vertical slice of the agreed Form C workflow. It uses d
 5. The wizard asks only missing guest-sourced Form C questions, one at a time. It never asks for hotel arrival time, room, the locked property address or the unproven Form B/Filer reference.
 6. Confirmation writes one validated `candidate.json` and one immutable `filing-request.json`.
 7. The filesystem status moves the case into the Filing Queue.
-8. Staff runs the deterministic preflight from the case screen; unsupported or ambiguous cases stay blocked.
-9. A `READY` plan can open the official Form C in a separate Chromium window and fill it from the sealed local data.
-10. Staff reviews the live form. The automation contains no government submission action.
+8. Staff chooses **Open portal and fill Form C**; the app creates one self-contained fill plan and applies it immediately.
+9. The worker stops only when the live page cannot perform a planned control operation.
+10. Staff reviews the live form and the government portal owns final data validation. The automation contains no submission action.
 
 There is no database, cloud backend, message broker, automated WhatsApp integration or real Optical Character Recognition (OCR).
 
@@ -38,10 +38,9 @@ Open `http://127.0.0.1:8000/staff` on the Filing Worker. A phone on the same tru
 The staff case screen is the primary MVP workflow. Once a guest has completed the Filing Request:
 
 1. Open the case from the staff dashboard.
-2. Choose **Run safe preflight**.
-3. If the plan is `READY`, choose **Open portal and fill Form C**.
-4. Complete the normal government login and CAPTCHA in the dedicated Chromium window when asked.
-5. Review the filled live form and submit it manually only when it is correct. The app neither clicks Submit nor captures the acknowledgement yet.
+2. Choose **Open portal and fill Form C**.
+3. Complete the normal government login and CAPTCHA in the dedicated Chromium window when asked.
+4. Review the filled live form and submit it manually only when it is correct. The app neither clicks Submit nor captures the acknowledgement yet.
 
 The old mock worker remains available only for Stage 1 development and regression testing. Do not run its watcher while testing the live staff workflow:
 
@@ -117,7 +116,7 @@ Staff completes the normal login and CAPTCHA, then the catalogue runs immediatel
 
 The catalogue is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels, select options and static radio/checkbox choice codes in the gitignored `data/portal-controls.json`; it excludes current text/file values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. The explicit Candidate mapping and its fail-closed gaps are documented in `docs/stage-2-control-mapping.md`. Live submission remains disabled.
 
-The field registry now separates unconditional Form C readiness, conditionally required portal branches, internal hotel metadata and optional fields. Staff supplies check-in date and hotel arrival time; expected checkout also comes from staff or booking data when known and falls back to one guest question only when absent. Room stays in case metadata, and the legacy physical Form B reference is no longer collected by the MVP. Closed sex, employment and purpose-of-visit answers reject unknown values. Arrived-from country is selected from the captured live portal vocabulary instead of accepting arbitrary text. A separate guest-camera photograph is normalised to a portal-safe JPEG, explicitly approved and sealed into the Filing Request. Intended stay is derived as the positive number of days between check-in and checkout. The dummy profiles use the live portal's non-branching `TOURIST VISA` choice; e-Visa subtype cases, outside-India destinations, activated special categories and other activated visa subtypes remain explicit preflight blockers.
+The field registry separates unconditional Form C readiness, conditionally required portal branches, internal hotel metadata and optional fields. Staff supplies check-in date and hotel arrival time; expected checkout also comes from staff or booking data when known and falls back to one guest question only when absent. Room stays in case metadata, and the legacy physical Form B reference is no longer collected by the MVP. Closed sex, employment and purpose-of-visit answers are normalised while the guest completes the wizard. A separate guest-camera photograph is converted to a portal-safe JPEG. Intended stay is derived as the number of days between check-in and checkout when those dates can be interpreted. Fill-plan creation does not block e-Visa labels, outside-India destinations, conditional branches or other business values; the live control or government portal reports what it cannot accept.
 
 Yeratta's India reference address is Filing Worker configuration, not a guest answer. Create the gitignored `data/property.json` locally with the portal's exact state and district option codes:
 
@@ -130,21 +129,21 @@ Yeratta's India reference address is Filing Worker configuration, not a guest an
 }
 ```
 
-Replace every placeholder locally. Do not commit the real property configuration. The live adapter will fail closed if this locked file is missing or invalid.
+Replace every placeholder locally. Do not commit the real property configuration. When this file is present, its values are copied into the fill plan. A missing or invalid file no longer blocks opening and filling the portal; the corresponding controls remain untouched for staff or portal validation.
 
-Build the deterministic Stage 2 preflight for one sealed Filing Request with:
+Build the self-contained fill plan directly for diagnostic use with:
 
 ```bash
 .venv/bin/python -m formc_app.fill_plan YRT-YYYYMMDD-XXXX --data-dir data
 ```
 
-This is an offline operation. It does not open a browser, fill a live control or submit anything. It atomically writes `data/cases/<case-id>/fill-plan.json` and its SHA-256 seal, verifies that the Candidate and guest photograph still match the sealed Filing Request, validates every prepared text, choice and file operation against the redacted control catalogue and records all remaining blockers. Property address, state, district and PIN are planned from the locked configuration. A normal India-destination case becomes `READY`; unsupported or ambiguous branches remain `BLOCKED`.
+This command only writes `data/cases/<case-id>/fill-plan.json` and its SHA-256 seal. It copies available Candidate, photograph and property values into ordered control operations. It does not compare those values with `portal-controls.json`, reject unsupported business values or open a browser.
 
-The staff case screen runs this preflight and fill-only sequence without case-specific terminal commands. The underlying diagnostic command remains available for developers:
+The staff case screen prepares the plan automatically and starts fill-only without case-specific terminal commands. The underlying diagnostic command remains available for developers:
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   .venv/bin/formc-fill-only YRT-YYYYMMDD-XXXX --data-dir data
 ```
 
-The staff action opens the official portal in the dedicated Chromium profile and waits for normal staff login and CAPTCHA when necessary. It verifies the authenticated page, live controls, plan seal, Candidate, Filing Request, photograph, property configuration and catalogue before applying the ordered operations. Dynamically loaded district/city choices must match exactly. The filled page remains open for staff review until Chromium is closed. The executor contains no submit action and refuses both known submission controls.
+The staff action opens the official portal in the dedicated Chromium profile and waits for normal staff login and CAPTCHA when necessary. The executor verifies only the plan seal, ordered operation structure, safe control identifiers and the permanent no-submit boundary. It then locates each live control and performs the requested fill, selection, radio check or upload. If the page cannot perform an operation, the run stops and reports that exact source field and portal control. Otherwise the filled page remains open for staff review. The executor contains no submit action and refuses both known submission controls.
