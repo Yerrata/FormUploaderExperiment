@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass(frozen=True)
@@ -168,3 +169,16 @@ EXTRACTED_FIELD_NAMES = tuple(
 QUESTION_FIELD_NAMES = tuple(
     field.name for field in FORM_FIELDS if field.question is not None
 )
+
+
+def intended_stay_days(check_in_value: str, check_out_value: str) -> int:
+    """Return the positive Form C stay duration for two ISO calendar dates."""
+    try:
+        check_in = date.fromisoformat(check_in_value)
+        check_out = date.fromisoformat(check_out_value)
+    except ValueError as exc:
+        raise ValueError("Check-in and checkout must be valid ISO dates") from exc
+    duration = (check_out - check_in).days
+    if duration < 1:
+        raise ValueError("Checkout must be later than check-in")
+    return duration

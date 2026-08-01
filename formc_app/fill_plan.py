@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from formc_app.domain import REQUIRED_FIELD_NAMES
+from formc_app.domain import REQUIRED_FIELD_NAMES, intended_stay_days
 from formc_app.models import CandidateFormC, CaseStatus
 from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue
 from formc_app.portal_mapping import (
@@ -36,12 +36,14 @@ class FillAction(StrEnum):
     FILL_TEXT = "FILL_TEXT"
     SELECT_OPTION = "SELECT_OPTION"
     CHECK_RADIO = "CHECK_RADIO"
+    UPLOAD_FILE = "UPLOAD_FILE"
 
 
 class FillValueSource(StrEnum):
     CANDIDATE = "CANDIDATE"
     PROPERTY_CONFIGURATION = "PROPERTY_CONFIGURATION"
     CONSTANT = "CONSTANT"
+    FILING_REQUEST = "FILING_REQUEST"
 
 
 class FillOperation(BaseModel):
@@ -53,6 +55,7 @@ class FillOperation(BaseModel):
     action: FillAction
     value: str
     value_source: FillValueSource
+    value_sha256: str | None = None
     runtime_option_check_required: bool = False
 
 
@@ -67,9 +70,10 @@ class FillBlocker(BaseModel):
 class PortalFillPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     case_id: str
     candidate_sha256: str
+    guest_photo_sha256: str | None = None
     catalogue_sha256: str
     property_config_sha256: str
     status: FillPlanStatus
@@ -110,6 +114,10 @@ OPTION_LABEL_FIELDS = {
     "arrived_from_country": "applicant_arrivedfromcountry",
 }
 
+DERIVED_FIELDS = {
+    "check_out_date": "applicant_intnddurhotel",
+}
+
 BLOCKED_CANDIDATE_FIELDS = {
     "arrival_time_hotel": (
         "arrival_time_format_unverified",
@@ -118,10 +126,6 @@ BLOCKED_CANDIDATE_FIELDS = {
     "next_destination": (
         "next_destination_schema_unresolved",
         "The India/outside-India destination branch and dependent controls remain unresolved.",
-    ),
-    "check_out_date": (
-        "intended_stay_units_unresolved",
-        "The portal's intended-stay duration units have not been confirmed.",
     ),
     "form_b_reference": (
         "filer_reference_semantics_unresolved",
@@ -139,10 +143,6 @@ GLOBAL_BLOCKERS = (
     FillBlocker(
         code="visa_subtype_condition_unresolved",
         message="The visa types that require a subtype and their valid subtype choices are unknown.",
-    ),
-    FillBlocker(
-        code="guest_photo_policy_unresolved",
-        message="No approved guest-photo source and suitability policy exists yet.",
     ),
 )
 
@@ -214,6 +214,7 @@ class _PlanBuilder:
         value: str,
         source: FillValueSource = FillValueSource.CANDIDATE,
         source_field: str | None = None,
+        value_sha256: str | None = None,
         runtime_option_check_required: bool = False,
     ) -> None:
         if control in LIVE_SUBMISSION_CONTROL_IDS:
@@ -232,6 +233,7 @@ class _PlanBuilder:
                 action=action,
                 value=value,
                 value_source=source,
+                value_sha256=value_sha256,
                 runtime_option_check_required=runtime_option_check_required,
             )
         )
@@ -394,6 +396,46 @@ class _PlanBuilder:
             value=value,
         )
 
+    def upload_file(
+        self,
+        *,
+        field: str,
+        control: str,
+        relative_path: str,
+        sha256: str,
+    ) -> None:
+        portal_control = self._single_control(control, field=field, expected_tag="input")
+        if portal_control is None:
+            return
+        if portal_control.input_type != "file":
+            self.block(
+                "catalogue_control_type_mismatch",
+                f"Catalogue control {control} is not a file input.",
+                field=field,
+            )
+            return
+        path = Path(relative_path)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or not relative_path.startswith("documents/")
+        ):
+            self.block(
+                "guest_photo_path_invalid",
+                "The guest photograph path is not a safe case-relative document path.",
+                field=field,
+            )
+            return
+        self._append(
+            field=field,
+            control=control,
+            action=FillAction.UPLOAD_FILE,
+            value=relative_path,
+            source=FillValueSource.FILING_REQUEST,
+            source_field="filing_request.guest_photo",
+            value_sha256=sha256,
+        )
+
 
 def _candidate_value(
     candidate: CandidateFormC,
@@ -435,6 +477,8 @@ def compile_fill_plan(
     catalogue: PortalControlCatalogue,
     property_config: YerattaPropertyConfig,
     candidate_sha256: str,
+    guest_photo_path: str | None = None,
+    guest_photo_sha256: str | None = None,
     envelope_blockers: list[FillBlocker] | None = None,
 ) -> PortalFillPlan:
     """Compile an inspectable plan without opening or changing a browser."""
@@ -457,6 +501,25 @@ def compile_fill_plan(
         value = _portal_date(candidate, field, builder)
         if value is not None:
             builder.fill_text(field=field, control=control, value=value)
+
+    check_in_value = _candidate_value(candidate, "check_in_date", builder)
+    check_out_value = _candidate_value(candidate, "check_out_date", builder)
+    if check_in_value is not None and check_out_value is not None:
+        try:
+            duration = intended_stay_days(check_in_value, check_out_value)
+        except ValueError as exc:
+            builder.block(
+                "candidate_stay_dates_invalid",
+                str(exc),
+                field="check_out_date",
+            )
+        else:
+            builder.fill_text(
+                field="check_out_date",
+                control=DERIVED_FIELDS["check_out_date"],
+                value=str(duration),
+                source_field="candidate.check_in_date+candidate.check_out_date",
+            )
 
     date_of_birth = _portal_date(candidate, "date_of_birth", builder)
     if date_of_birth is not None:
@@ -535,11 +598,28 @@ def compile_fill_plan(
         source_field="property.reference_pin_code",
     )
 
+    if guest_photo_path is not None and guest_photo_sha256 is not None:
+        builder.upload_file(
+            field="guest_photo",
+            control="file1",
+            relative_path=guest_photo_path,
+            sha256=guest_photo_sha256,
+        )
+    elif not any(
+        blocker.code == "guest_photo_contract_invalid" for blocker in builder.blockers
+    ):
+        builder.block(
+            "guest_photo_contract_invalid",
+            "The sealed Filing Request does not provide one verified guest photograph.",
+            field="guest_photo",
+        )
+
     builder.blockers.extend(GLOBAL_BLOCKERS)
 
     planned_or_blocked = (
         set(DIRECT_FIELDS)
         | set(DATE_FIELDS)
+        | set(DERIVED_FIELDS)
         | set(OPTION_LABEL_FIELDS)
         | {"date_of_birth", "sex", "employed_in_india", "purpose_of_visit"}
         | set(BLOCKED_CANDIDATE_FIELDS)
@@ -556,6 +636,7 @@ def compile_fill_plan(
     plan = PortalFillPlan(
         case_id=candidate.case_id,
         candidate_sha256=candidate_sha256,
+        guest_photo_sha256=guest_photo_sha256,
         catalogue_sha256=CaseStore.sha256(_canonical_bytes(catalogue)),
         property_config_sha256=CaseStore.sha256(_canonical_bytes(property_config)),
         status=FillPlanStatus.BLOCKED if builder.blockers else FillPlanStatus.READY,
@@ -608,6 +689,8 @@ def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> Portal
             )
         )
     filing_request = store.load_filing_request(case_id)
+    guest_photo_path: str | None = None
+    guest_photo_sha256: str | None = None
     if filing_request is None:
         envelope_blockers.append(
             FillBlocker(
@@ -630,11 +713,62 @@ def preflight_case(*, store: CaseStore, data_root: Path, case_id: str) -> Portal
             )
         )
 
+    if filing_request is not None:
+        metadata = summary.metadata
+        if (
+            filing_request.request_version < 2
+            or filing_request.guest_photo_source != "guest_camera"
+            or filing_request.guest_photo_suitability_confirmed_at is None
+            or not filing_request.guest_photo_sha256
+            or not metadata.guest_photo_document
+        ):
+            envelope_blockers.append(
+                FillBlocker(
+                    code="guest_photo_contract_invalid",
+                    field="guest_photo",
+                    message=(
+                        "The Filing Request does not seal one approved "
+                        "guest-camera photograph."
+                    ),
+                )
+            )
+        else:
+            try:
+                actual_photo_sha256 = store.document_sha256(
+                    case_id,
+                    metadata.guest_photo_document,
+                )
+            except ValueError as exc:
+                envelope_blockers.append(
+                    FillBlocker(
+                        code="guest_photo_missing",
+                        field="guest_photo",
+                        message=str(exc),
+                    )
+                )
+            else:
+                if actual_photo_sha256 != filing_request.guest_photo_sha256:
+                    envelope_blockers.append(
+                        FillBlocker(
+                            code="guest_photo_hash_mismatch",
+                            field="guest_photo",
+                            message=(
+                                "The guest photograph no longer matches the sealed "
+                                "Filing Request."
+                            ),
+                        )
+                    )
+                else:
+                    guest_photo_path = metadata.guest_photo_document
+                    guest_photo_sha256 = actual_photo_sha256
+
     plan = compile_fill_plan(
         candidate=candidate,
         catalogue=catalogue,
         property_config=property_config,
         candidate_sha256=candidate_sha256,
+        guest_photo_path=guest_photo_path,
+        guest_photo_sha256=guest_photo_sha256,
         envelope_blockers=envelope_blockers,
     )
     store.save_fill_plan(case_id, plan)

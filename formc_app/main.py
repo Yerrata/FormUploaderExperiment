@@ -4,18 +4,22 @@ import os
 import re
 import secrets
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from PIL import Image, ImageOps, UnidentifiedImageError
+
 from formc_app.domain import (
     EXTRACTED_FIELD_NAMES,
     FIELD_BY_NAME,
     FORM_FIELDS,
     QUESTION_FIELD_NAMES,
     REQUIRED_FIELD_NAMES,
+    intended_stay_days,
 )
 from formc_app.dummy_extraction import DUMMY_PROFILES, extract_dummy
 from formc_app.models import (
@@ -31,6 +35,36 @@ from formc_app.storage import CaseNotFoundError, CaseStore, InvalidGuestTokenErr
 
 PACKAGE_ROOT = Path(__file__).parent
 templates = Jinja2Templates(directory=PACKAGE_ROOT / "templates")
+GUEST_PHOTO_RAW_MAX_BYTES = 15_000_000
+GUEST_PHOTO_PORTAL_MAX_BYTES = 1_000_000
+GUEST_PHOTO_MAX_EDGE = 1200
+GUEST_PHOTO_MIN_EDGE = 240
+GUEST_PHOTO_MAX_PIXELS = 25_000_000
+
+
+def _normalise_guest_photo(content: bytes) -> bytes:
+    if not content:
+        raise ValueError("A guest photograph is required")
+    if len(content) > GUEST_PHOTO_RAW_MAX_BYTES:
+        raise ValueError("The guest photograph must be under 15 MB before processing")
+    try:
+        with Image.open(BytesIO(content)) as source:
+            if source.width * source.height > GUEST_PHOTO_MAX_PIXELS:
+                raise ValueError("The guest photograph has too many pixels")
+            source.load()
+            image = ImageOps.exif_transpose(source).convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise ValueError("The guest photograph must be a valid image") from exc
+    if min(image.size) < GUEST_PHOTO_MIN_EDGE:
+        raise ValueError("The guest photograph is too small to identify the guest clearly")
+    image.thumbnail((GUEST_PHOTO_MAX_EDGE, GUEST_PHOTO_MAX_EDGE))
+    for quality in range(90, 39, -5):
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=quality, optimize=True)
+        jpeg = output.getvalue()
+        if len(jpeg) <= GUEST_PHOTO_PORTAL_MAX_BYTES:
+            return jpeg
+    raise ValueError("The guest photograph could not be reduced below the portal's 1 MB limit")
 
 
 def _store(request: Request) -> CaseStore:
@@ -120,6 +154,8 @@ def create_app(data_root: Path | None = None) -> FastAPI:
     ):
         if dummy_profile not in DUMMY_PROFILES:
             raise HTTPException(status_code=400, detail="Unknown dummy profile")
+        if check_out_date is not None and check_out_date <= check_in_date:
+            raise HTTPException(status_code=422, detail="Checkout must be later than check-in")
         metadata = _store(request).create_case(
             check_in_date=check_in_date,
             check_out_date=check_out_date,
@@ -221,17 +257,40 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         token: str,
         passport: UploadFile,
         visa: UploadFile,
+        guest_photo: UploadFile,
+        guest_photo_confirmed: str = Form(...),
     ):
         summary = _guest_case(request, token)
         passport_content = await passport.read()
         visa_content = await visa.read()
+        guest_photo_content = await guest_photo.read()
         if not passport_content or not visa_content:
             raise HTTPException(status_code=400, detail="Both photographs are required")
         if len(passport_content) > 15_000_000 or len(visa_content) > 15_000_000:
             raise HTTPException(status_code=413, detail="Each photograph must be under 15 MB")
+        if guest_photo_confirmed != "yes":
+            raise HTTPException(
+                status_code=422,
+                detail="Confirm that the guest photograph is suitable",
+            )
+        try:
+            normalised_guest_photo = _normalise_guest_photo(guest_photo_content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         store = _store(request)
-        store.save_document(summary.metadata.case_id, "passport", passport.filename, passport_content)
+        store.save_document(
+            summary.metadata.case_id,
+            "passport",
+            passport.filename,
+            passport_content,
+        )
         store.save_document(summary.metadata.case_id, "visa", visa.filename, visa_content)
+        store.save_document(
+            summary.metadata.case_id,
+            "guest_photo",
+            "guest-photo.jpg",
+            normalised_guest_photo,
+        )
         fields = extract_dummy(summary.metadata.dummy_profile)
         staff_values = {
             "check_in_date": summary.metadata.check_in_date.isoformat(),
@@ -334,6 +393,11 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="An answer is required")
         try:
             _validate_candidate_input(field_name, value)
+            if field_name == "check_out_date":
+                check_in_value = candidate.value("check_in_date")
+                if check_in_value is None:
+                    raise ValueError("Check-in date is missing")
+                intended_stay_days(check_in_value, value)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         candidate.fields[field_name] = CandidateField(value=value, source="guest_answer")
@@ -365,14 +429,33 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         missing = candidate.missing(REQUIRED_FIELD_NAMES)
         if missing:
             raise HTTPException(status_code=422, detail=f"Missing mandatory fields: {', '.join(missing)}")
-        candidate.guest_confirmed_at = utc_now()
-        candidate.validated_at = utc_now()
+        try:
+            intended_stay_days(
+                candidate.value("check_in_date") or "",
+                candidate.value("check_out_date") or "",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         store = _store(request)
+        metadata = store.load_metadata(candidate.case_id)
+        if metadata.guest_photo_document is None:
+            raise HTTPException(status_code=422, detail="The approved guest photograph is missing")
+        guest_photo_sha256 = store.document_sha256(
+            candidate.case_id,
+            metadata.guest_photo_document,
+        )
+        confirmed_at = utc_now()
+        candidate.guest_confirmed_at = confirmed_at
+        candidate.validated_at = confirmed_at
         store.save_candidate(candidate)
         store.save_filing_request(
             FilingRequest(
                 case_id=candidate.case_id,
+                request_version=2,
                 candidate_sha256=store.candidate_sha256(candidate),
+                guest_photo_sha256=guest_photo_sha256,
+                guest_photo_source="guest_camera",
+                guest_photo_suitability_confirmed_at=confirmed_at,
             )
         )
         store.update_status(

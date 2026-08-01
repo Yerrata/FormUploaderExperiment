@@ -1,15 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Photograph documents · Yeratta{% endblock %}
+{% block title %}Photographs for Form C · Yeratta{% endblock %}
 {% block header_action %}<span class="secure-pill">One guest only</span>{% endblock %}
 {% block content %}
 <span class="eyebrow">Step 1 of 4</span>
-<h1>Photograph your documents</h1>
-<p class="lead">We will use these photographs only to prepare your required government Form C particulars.</p>
+<h1>Take the three required photographs</h1>
+<p class="lead">We will use them only to prepare your government Form C particulars.</p>
 <form method="post" enctype="multipart/form-data" class="capture-form">
   <label class="capture-card">
     <span class="capture-icon">▣</span><span><b>Passport photograph page</b><small>Make every corner and all text visible.</small></span>
     <input type="file" name="passport" accept="image/*,.pdf" capture="environment" required>
   </label>
+  <label class="capture-card">
+    <span class="capture-icon">●</span><span><b>Guest face photograph</b><small>Face the camera, keep both eyes open and show the complete head in good light.</small></span>
+    <input type="file" name="guest_photo" accept="image/*" capture="user" required>
+  </label>
+  <label><input type="checkbox" name="guest_photo_confirmed" value="yes" required> I confirm this photograph was taken now and clearly shows the guest facing forward with the full head visible.</label>
   <label class="capture-card">
     <span class="capture-icon">▤</span><span><b>Visa photograph</b><small>Photograph the complete visa or e-visa page.</small></span>
     <input type="file" name="visa" accept="image/*,.pdf" capture="environment" required>

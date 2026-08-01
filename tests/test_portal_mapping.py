@@ -38,7 +38,7 @@ def test_ambiguous_candidate_fields_fail_closed():
     mappings = mapping_by_candidate_field()
 
     assert mappings["next_destination"].status == MappingStatus.SCHEMA_CHANGE_REQUIRED
-    assert mappings["check_out_date"].status == MappingStatus.DERIVED_UNCONFIRMED
+    assert mappings["check_out_date"].status == MappingStatus.DERIVED
     assert mappings["form_b_reference"].status == MappingStatus.UNCONFIRMED
 
 

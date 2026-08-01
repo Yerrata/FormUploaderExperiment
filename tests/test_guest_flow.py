@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from io import BytesIO
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from formc_app.domain import (
     EXTRACTED_FIELD_NAMES,
@@ -13,6 +15,20 @@ from formc_app.domain import (
 from formc_app.main import create_app
 from formc_app.models import CaseStatus
 from formc_app.storage import CaseStore, InvalidGuestTokenError
+
+
+def guest_photo_bytes() -> bytes:
+    output = BytesIO()
+    Image.new("RGB", (640, 800), color=(80, 120, 160)).save(output, format="JPEG")
+    return output.getvalue()
+
+
+def capture_files(*, visa: bytes = b"visa-photo"):
+    return {
+        "passport": ("passport.jpg", b"passport-photo", "image/jpeg"),
+        "visa": ("visa.jpg", visa, "image/jpeg"),
+        "guest_photo": ("guest.jpg", guest_photo_bytes(), "image/jpeg"),
+    }
 
 
 def create_case(client: TestClient, app, *, profile: str = "daniel"):
@@ -55,10 +71,8 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
 
     capture = client.post(
         f"/guest/{token}/capture",
-        files={
-            "passport": ("passport.jpg", b"passport-photo", "image/jpeg"),
-            "visa": ("visa.jpg", b"visa-photo", "image/jpeg"),
-        },
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
     )
     assert capture.status_code == 303
     candidate = app.state.store.load_candidate(created.metadata.case_id)
@@ -97,7 +111,23 @@ def test_complete_guest_flow_creates_one_validated_filing_request(tmp_path: Path
     assert correction.source == "guest_correction"
     assert correction.original_value == "E12345884"
     assert (tmp_path / "cases" / created.metadata.case_id / "filing-request.json").is_file()
-    assert (tmp_path / "cases" / created.metadata.case_id / "documents" / "passport.jpg").read_bytes() == b"passport-photo"
+    passport = (
+        tmp_path
+        / "cases"
+        / created.metadata.case_id
+        / "documents"
+        / "passport.jpg"
+    )
+    assert passport.read_bytes() == b"passport-photo"
+    guest_photo = tmp_path / "cases" / created.metadata.case_id / "documents" / "guest_photo.jpg"
+    assert guest_photo.read_bytes().startswith(b"\xff\xd8")
+    assert guest_photo.stat().st_size <= 1_000_000
+    filing_request = app.state.store.load_filing_request(created.metadata.case_id)
+    assert filing_request is not None
+    assert filing_request.request_version == 2
+    assert filing_request.guest_photo_sha256 == app.state.store.sha256(
+        guest_photo.read_bytes()
+    )
     assert client.get(f"/guest/{token}/done").status_code == 200
     assert client.get(f"/guest/{token}/review").status_code == 403
 
@@ -109,10 +139,8 @@ def test_closed_guest_choice_rejects_an_unknown_value(tmp_path: Path):
     token = created.metadata.guest_token
     client.post(
         f"/guest/{token}/capture",
-        files={
-            "passport": ("passport.jpg", b"passport", "image/jpeg"),
-            "visa": ("visa.jpg", b"visa", "image/jpeg"),
-        },
+        files=capture_files(),
+        data={"guest_photo_confirmed": "yes"},
     )
     candidate = app.state.store.load_candidate(created.metadata.case_id)
     assert candidate is not None
@@ -141,13 +169,54 @@ def test_missing_document_and_missing_answer_block_progress(tmp_path: Path):
 
     response = client.post(
         f"/guest/{token}/capture",
-        files={
-            "passport": ("passport.jpg", b"passport", "image/jpeg"),
-            "visa": ("visa.jpg", b"", "image/jpeg"),
-        },
+        files=capture_files(visa=b""),
+        data={"guest_photo_confirmed": "yes"},
     )
     assert response.status_code == 400
     assert app.state.store.load_candidate(created.metadata.case_id) is None
+
+
+def test_guest_photo_requires_an_image_and_explicit_suitability_confirmation(tmp_path: Path):
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    created = create_case(client, app)
+    token = created.metadata.guest_token
+
+    unconfirmed = client.post(
+        f"/guest/{token}/capture",
+        files=capture_files(),
+    )
+    assert unconfirmed.status_code == 422
+
+    invalid_image = client.post(
+        f"/guest/{token}/capture",
+        files={
+            **capture_files(),
+            "guest_photo": ("guest.jpg", b"not-image", "image/jpeg"),
+        },
+        data={"guest_photo_confirmed": "yes"},
+    )
+    assert invalid_image.status_code == 422
+    assert app.state.store.load_candidate(created.metadata.case_id) is None
+
+
+def test_staff_rejects_checkout_that_is_not_later_than_check_in(tmp_path: Path):
+    app = create_app(tmp_path)
+    client = TestClient(app, follow_redirects=False)
+
+    response = client.post(
+        "/staff/cases",
+        data={
+            "check_in_date": "2026-07-31",
+            "check_out_date": "2026-07-31",
+            "room": "Sea 04",
+            "form_b_reference": "B-2026-118",
+            "dummy_profile": "daniel",
+        },
+    )
+
+    assert response.status_code == 422
+    assert app.state.store.list_cases() == []
 
 
 def test_guest_token_is_single_case_and_expires(tmp_path: Path):
