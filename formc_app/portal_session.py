@@ -19,6 +19,8 @@ from formc_app.storage import CaseStore
 
 
 DEFAULT_PORTAL_URL = "https://indianfrro.gov.in/frro/FormC"
+PORTAL_DEBUG_PORT = 9222
+PORTAL_CDP_URL = f"http://127.0.0.1:{PORTAL_DEBUG_PORT}"
 PORTAL_HOST = "indianfrro.gov.in"
 PORTAL_PATH_PREFIX = "/frro/FormC"
 AUTHENTICATED_FORM_MARKERS = (
@@ -118,6 +120,7 @@ class PortalSessionManager:
         timeout_seconds: float = 600,
         poll_seconds: float = 1,
         on_authenticated: Callable[[Page], None] | None = None,
+        hold_open: bool = False,
     ) -> PortalSessionSnapshot:
         validate_portal_url(self.portal_url)
         self._prepare_profile()
@@ -129,6 +132,10 @@ class PortalSessionManager:
                 user_data_dir=str(self.profile_dir),
                 headless=False,
                 viewport=None,
+                args=[
+                    "--remote-debugging-address=127.0.0.1",
+                    f"--remote-debugging-port={PORTAL_DEBUG_PORT}",
+                ],
             )
             try:
                 page = context.pages[0] if context.pages else context.new_page()
@@ -145,6 +152,12 @@ class PortalSessionManager:
                             message="Authenticated Form C controls detected",
                         )
                         self._save_snapshot(snapshot)
+                        if hold_open:
+                            while context.pages:
+                                try:
+                                    context.pages[0].wait_for_timeout(500)
+                                except Exception:
+                                    break
                         return snapshot
                     if time.monotonic() >= deadline:
                         break
@@ -158,7 +171,10 @@ class PortalSessionManager:
                 self._save_snapshot(snapshot)
                 return snapshot
             finally:
-                context.close()
+                try:
+                    context.close()
+                except Exception:
+                    pass
 
 
 def main() -> None:
@@ -183,14 +199,17 @@ def main() -> None:
     print("Complete the normal government login and CAPTCHA in that window.")
     captured_catalogue = None
 
-    def capture_controls(page: Page) -> None:
+    def authenticated(page: Page) -> None:
         nonlocal captured_catalogue
-        from formc_app.portal_catalogue import save_page_catalogue
+        if args.catalogue:
+            from formc_app.portal_catalogue import save_page_catalogue
 
-        captured_catalogue = save_page_catalogue(
-            page,
-            args.data_dir / "portal-controls.json",
-        )
+            captured_catalogue = save_page_catalogue(
+                page,
+                args.data_dir / "portal-controls.json",
+            )
+        print("Portal session is ready. Keep this Chromium window open.")
+        print("Fill-only runs will reuse this same authenticated window.")
 
     try:
         snapshot = PortalSessionManager(
@@ -198,7 +217,8 @@ def main() -> None:
             portal_url=args.portal_url,
         ).open_for_login(
             timeout_seconds=args.timeout,
-            on_authenticated=capture_controls if args.catalogue else None,
+            on_authenticated=authenticated,
+            hold_open=True,
         )
     except RuntimeError as error:
         print(f"Portal helper stopped safely: {error}")

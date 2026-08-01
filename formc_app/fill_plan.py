@@ -13,6 +13,7 @@ from formc_app.domain import intended_stay_days
 from formc_app.models import CandidateFormC
 from formc_app.portal_mapping import (
     EMPLOYMENT_CHOICE_CODES,
+    INDIA_STATE_CHOICE_CODES,
     LIVE_SUBMISSION_CONTROL_IDS,
     PROPERTY_CONFIG_PORTAL_CONTROLS,
     PURPOSE_OF_VISIT_CHOICE_CODES,
@@ -335,6 +336,10 @@ def _portal_time(
     return value
 
 
+def _normalised_choice_label(value: str) -> str:
+    return " ".join(value.replace("&", " and ").split()).casefold()
+
+
 def compile_fill_plan(
     *,
     candidate: CandidateFormC,
@@ -437,11 +442,21 @@ def compile_fill_plan(
             candidate, "next_destination_city", builder
         )
         if destination_state is not None:
-            builder.select_label(
-                field="next_destination_state",
-                control="applicant_next_destination_state_IN",
-                label=destination_state,
+            destination_state_code = INDIA_STATE_CHOICE_CODES.get(
+                _normalised_choice_label(destination_state)
             )
+            if destination_state_code is not None:
+                builder.select_value(
+                    field="next_destination_state",
+                    control="applicant_next_destination_state_IN",
+                    value=destination_state_code,
+                )
+            else:
+                builder.select_label(
+                    field="next_destination_state",
+                    control="applicant_next_destination_state_IN",
+                    label=destination_state,
+                )
         if destination_city is not None:
             builder.select_dynamic_label(
                 field="next_destination_city",

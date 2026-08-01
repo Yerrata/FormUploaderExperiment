@@ -50,6 +50,9 @@ class FakePage:
     def goto(self, url: str, **_kwargs) -> None:
         self.url = url
 
+    def wait_for_timeout(self, _milliseconds: int) -> None:
+        return None
+
 
 class FakeContext:
     def __init__(self, page: FakePage):
@@ -173,6 +176,8 @@ def test_manager_uses_persistent_profile_and_writes_redacted_ready_snapshot(
     assert "secret" not in snapshot.portal_location
     assert launch_arguments["headless"] is False
     assert Path(launch_arguments["user_data_dir"]) == tmp_path / "portal-browser-profile"
+    assert "--remote-debugging-address=127.0.0.1" in launch_arguments["args"]
+    assert "--remote-debugging-port=9222" in launch_arguments["args"]
     assert context.closed
     persisted = json.loads((tmp_path / "portal-session.json").read_text("utf-8"))
     assert persisted["state"] == "READY"
@@ -232,3 +237,32 @@ def test_manager_records_needs_login_without_persisting_query_token(
     assert snapshot.state == PortalSessionState.NEEDS_LOGIN
     assert context.closed
     assert "secret" not in (tmp_path / "portal-session.json").read_text("utf-8")
+
+
+def test_manager_can_hold_the_authenticated_window_until_staff_closes_it(
+    tmp_path: Path,
+    monkeypatch,
+):
+    page = FakePage(url="https://indianfrro.gov.in/frro/FormC/formc.jsp")
+    context = FakeContext(page)
+    waits = []
+
+    def close_window(_milliseconds: int) -> None:
+        waits.append("held")
+        context.pages.clear()
+
+    page.wait_for_timeout = close_window
+    monkeypatch.setattr(
+        "formc_app.portal_session.sync_playwright",
+        lambda: FakePlaywrightContext(context),
+    )
+
+    snapshot = PortalSessionManager(data_root=tmp_path).open_for_login(
+        timeout_seconds=0,
+        poll_seconds=0,
+        hold_open=True,
+    )
+
+    assert snapshot.state == PortalSessionState.READY
+    assert waits == ["held"]
+    assert context.closed

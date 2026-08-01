@@ -24,7 +24,7 @@
         {% if case.state.status == status.READY_FOR_FILING %}
         <div class="action-stack">
           <form method="post" action="{{ request.url_for('fill_only_staff_case', case_id=case.metadata.case_id) }}">
-            <button class="primary full" type="submit" {% if fill_run_active %}disabled{% endif %}>{% if fill_run_active %}Government portal is open{% else %}Open portal and fill Form C{% endif %}</button>
+            <button class="primary full" type="submit" {% if fill_run_active %}disabled{% endif %}>{% if fill_run_active %}Filling the government portal{% else %}Fill Form C in portal window{% endif %}</button>
           </form>
         </div>
         {% endif %}
@@ -52,9 +52,9 @@
     <div class="portal-launch-card">
       <div class="portal-icon">C</div>
       <span class="eyebrow">Official government portal</span>
-      <h2>Form C opens in a separate Chromium window</h2>
-      <p>Login and CAPTCHA stay inside that dedicated browser. The Yeratta app receives no government password and has no submit action.</p>
-      <ol class="portal-steps"><li>Choose Open portal and fill Form C.</li><li>Complete normal login and CAPTCHA if asked.</li><li>The worker fills each planned control in order.</li><li>Review the filled form and submit it manually only when it is correct.</li></ol>
+      <h2>Form C stays in one reusable Chromium window</h2>
+      <p>Start the portal helper once, complete login and CAPTCHA, and keep that window open. Every fill-only run reuses it. The Yeratta app receives no government password and has no submit action.</p>
+      <ol class="portal-steps"><li>Run formc-portal-login once and keep its Chromium window open.</li><li>Complete the normal government login and CAPTCHA in that window.</li><li>Choose Fill Form C in portal window for each case.</li><li>Review the filled form and submit it manually only when it is correct.</li></ol>
     </div>
     <div class="run-panel run-{{ fill_run.status.value|lower }}">
       <span class="eyebrow">Fill-only run</span>
