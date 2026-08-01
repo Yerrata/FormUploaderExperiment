@@ -115,6 +115,12 @@ def test_prepare_fill_plan_is_self_contained_and_catalogue_free(tmp_path: Path):
     assert operations[("candidate.visa_type", "applicant_visatype")].option_match == FillOptionMatch.LABEL
     assert operations[("candidate.employed_in_india", "employed")].value == "N"
     assert operations[("candidate.purpose_of_visit", "applicant_purpovisit")].value == "16"
+    assert operations[
+        ("candidate.next_destination_state", "applicant_next_destination_state_IN")
+    ].value == "1"
+    assert operations[
+        ("candidate.next_destination_state", "applicant_next_destination_state_IN")
+    ].option_match == FillOptionMatch.VALUE
     assert operations[("candidate.date_of_birth", "applicant_dob")].value == "17/02/1990"
     assert operations[("candidate.check_in_date", "applicant_doarrivalhotel")].value == "31/07/2026"
     assert operations[("candidate.check_in_date+candidate.check_out_date", "applicant_intnddurhotel")].value == "3"

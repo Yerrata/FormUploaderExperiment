@@ -39,7 +39,7 @@ The staff case screen is the primary MVP workflow. Once a guest has completed th
 
 1. Open the case from the staff dashboard.
 2. Choose **Open portal and fill Form C**.
-3. Complete the normal government login and CAPTCHA in the dedicated Chromium window when asked.
+3. Start the reusable government-portal Chromium window once, then complete normal login and CAPTCHA there.
 4. Review the filled live form and submit it manually only when it is correct. The app neither clicks Submit nor captures the acknowledgement yet.
 
 The old mock worker remains available only for Stage 1 development and regression testing. Do not run its watcher while testing the live staff workflow:
@@ -89,7 +89,7 @@ The guest link grants access to one case only. It becomes read-only immediately 
 
 ## Stage 2 preview: authorised portal login
 
-The first Stage 2 component uses a dedicated persistent Chromium profile for the government portal. It does not bypass CAPTCHA, fill a live form or submit anything. Staff completes the normal login and CAPTCHA once; the helper reports ready only after it detects a plausible authenticated Form C form on the official HTTPS host.
+The first Stage 2 component uses one long-lived Chromium window and a dedicated persistent profile for the government portal. It does not bypass CAPTCHA or submit anything. Staff completes the normal login and CAPTCHA once; the helper reports ready only after it detects a plausible authenticated Form C form on the official HTTPS host. Keep the command and its Chromium window open while processing cases.
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers .venv/bin/formc-portal-login
@@ -112,7 +112,7 @@ PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   .venv/bin/formc-portal-login --catalogue
 ```
 
-Staff completes the normal login and CAPTCHA, then the catalogue runs immediately before that browser closes. The future Filing Worker will likewise remain alive from Portal Session Renewal through authorised processing; a worker restart requires renewal.
+Staff completes the normal login and CAPTCHA, then the catalogue runs immediately in that browser. The helper keeps the same window alive so subsequent fill-only runs attach to it without launching another Chromium process. Closing the reusable portal window requires Portal Session Renewal.
 
 The catalogue is read-only. It does not fill, click or submit controls. It stores names, IDs, types, labels, select options and static radio/checkbox choice codes in the gitignored `data/portal-controls.json`; it excludes current text/file values, hidden inputs, credential-like controls, cookies, page HTML, screenshots, form actions and URL queries. The explicit Candidate mapping and its fail-closed gaps are documented in `docs/stage-2-control-mapping.md`. Live submission remains disabled.
 
@@ -146,4 +146,4 @@ PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   .venv/bin/formc-fill-only YRT-YYYYMMDD-XXXX --data-dir data
 ```
 
-The staff action opens the official portal in the dedicated Chromium profile and waits for normal staff login and CAPTCHA when necessary. The executor verifies only the plan seal, ordered operation structure, safe control identifiers and the permanent no-submit boundary. It then locates each live control and performs the requested fill, selection, radio check or upload. If the page cannot perform an operation, the run stops and reports that exact source field and portal control. Otherwise the filled page remains open for staff review. The executor contains no submit action and refuses both known submission controls.
+The staff action attaches to the already-open official portal window; it never launches a second Chromium process. Start `formc-portal-login` once and keep that window open. The executor verifies only the plan seal, ordered operation structure, safe control identifiers and the permanent no-submit boundary. It then locates each live control and performs the requested fill, selection, radio check or upload. Known Indian destination states are emitted as the portal's exact numeric option codes, with normalized live-label matching retained as a fallback for unknown choices. If the page cannot perform an operation, the run stops and reports that exact source field and portal control. Otherwise the same filled page remains open for staff review and manual submission. The executor contains no submit action and refuses both known submission controls.

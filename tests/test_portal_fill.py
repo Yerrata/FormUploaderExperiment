@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,9 +16,16 @@ from formc_app.fill_plan import (
     PortalFillPlan,
     _canonical_bytes,
 )
-from formc_app.models import CandidateField, CandidateFormC, CaseStatus, FilingRequest, utc_now
+from formc_app.models import (
+    CandidateField,
+    CandidateFormC,
+    CaseStatus,
+    FilingRequest,
+    FillOnlyRunStatus,
+    utc_now,
+)
 from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue, PortalOption
-from formc_app.portal_fill import PortalFillExecutor
+from formc_app.portal_fill import FillOnlyBrowser, PortalFillExecutor, _normalized_label
 from formc_app.property_config import YerattaPropertyConfig
 from formc_app.storage import CaseStore
 
@@ -248,6 +256,12 @@ def test_executor_fills_and_uploads_from_the_sealed_ready_plan(
     assert all("pmsbmt" not in action[1] for action in page.actions)
 
 
+def test_live_option_labels_normalise_case_spacing_and_ampersands():
+    assert _normalized_label("Andaman &  Nicobar Islands") == _normalized_label(
+        "ANDAMAN AND NICOBAR ISLANDS"
+    )
+
+
 def test_executor_reports_the_exact_operation_the_live_page_rejects(
     tmp_path: Path,
     monkeypatch,
@@ -285,3 +299,63 @@ def test_executor_rejects_a_fill_plan_changed_after_sealing(tmp_path: Path):
         PortalFillExecutor(store=store, data_root=tmp_path).load_verified_plan(
             plan.case_id
         )
+
+
+def test_fill_only_reuses_the_existing_authenticated_window(
+    tmp_path: Path,
+    monkeypatch,
+):
+    page = FakePage()
+    browser_context = SimpleNamespace(pages=[page])
+    connected_browser = SimpleNamespace(contexts=[browser_context])
+    connection_urls = []
+
+    class FakePlaywright:
+        chromium = SimpleNamespace(
+            connect_over_cdp=lambda url: (
+                connection_urls.append(url) or connected_browser
+            )
+        )
+
+    class FakePlaywrightContext:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, *_args):
+            return None
+
+    executed = []
+    plan = SimpleNamespace(operations=[1, 2, 3])
+    executor = SimpleNamespace(
+        data_root=tmp_path,
+        execute=lambda selected_page, case_id: (
+            executed.append((selected_page, case_id)) or plan
+        ),
+    )
+    progress = []
+    monkeypatch.setattr(
+        "formc_app.portal_fill.sync_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(
+        "formc_app.portal_fill.is_authenticated_form_c",
+        lambda selected_page: selected_page is page,
+    )
+
+    result = FillOnlyBrowser(executor=executor).run(
+        "YRT-TEST",
+        hold_for_review=False,
+        wait_for_browser_close=False,
+        progress=lambda status, message, count: progress.append(
+            (status, message, count)
+        ),
+    )
+
+    assert result is plan
+    assert connection_urls == ["http://127.0.0.1:9222"]
+    assert executed == [(page, "YRT-TEST")]
+    assert [item[0] for item in progress] == [
+        FillOnlyRunStatus.STARTING,
+        FillOnlyRunStatus.FILLING,
+        FillOnlyRunStatus.REVIEW,
+    ]

@@ -19,7 +19,12 @@ from formc_app.fill_plan import (
 )
 from formc_app.models import FillOnlyRunStatus
 from formc_app.portal_mapping import LIVE_SUBMISSION_CONTROL_IDS
-from formc_app.portal_session import DEFAULT_PORTAL_URL, is_authenticated_form_c, validate_portal_url
+from formc_app.portal_session import (
+    DEFAULT_PORTAL_URL,
+    PORTAL_CDP_URL,
+    is_authenticated_form_c,
+    validate_portal_url,
+)
 from formc_app.storage import CaseStore
 
 
@@ -34,7 +39,8 @@ OPTION_SCRIPT = r"""
 
 
 def _normalized_label(value: str) -> str:
-    return " ".join(value.split()).casefold()
+    words = re.sub(r"[^a-z0-9]+", " ", value.replace("&", " and ").casefold())
+    return " ".join(words.split())
 
 
 @dataclass
@@ -173,11 +179,8 @@ class PortalFillExecutor:
 class FillOnlyBrowser:
     executor: PortalFillExecutor
     portal_url: str = DEFAULT_PORTAL_URL
+    cdp_url: str = PORTAL_CDP_URL
     authentication_timeout_seconds: float = 600
-
-    @property
-    def profile_dir(self) -> Path:
-        return self.executor.data_root / "portal-browser-profile"
 
     def run(
         self,
@@ -196,29 +199,40 @@ class FillOnlyBrowser:
                 progress(status, message, operations_filled)
 
         validate_portal_url(self.portal_url)
-        self.profile_dir.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault(
             "PLAYWRIGHT_BROWSERS_PATH",
             str(Path(".playwright-browsers").resolve()),
         )
         report(
             FillOnlyRunStatus.STARTING,
-            "Opening the dedicated government-portal Chromium window",
+            "Connecting to the existing government-portal Chromium window",
         )
         with sync_playwright() as playwright:
-            context = playwright.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile_dir),
-                headless=False,
-                viewport=None,
-            )
             try:
-                page = context.pages[0] if context.pages else context.new_page()
+                browser = playwright.chromium.connect_over_cdp(self.cdp_url)
+            except PlaywrightError as error:
+                raise ValueError(
+                    "The reusable portal window is not open; run formc-portal-login "
+                    "once and keep its Chromium window open"
+                ) from error
+            contexts = browser.contexts
+            if len(contexts) != 1 or not contexts[0].pages:
+                raise ValueError("The reusable portal window has no active page")
+            context = contexts[0]
+            authenticated_pages = [
+                candidate
+                for candidate in context.pages
+                if is_authenticated_form_c(candidate)
+            ]
+            page = authenticated_pages[0] if authenticated_pages else context.pages[0]
+            if not authenticated_pages:
                 page.goto(self.portal_url, wait_until="domcontentloaded")
+            try:
                 deadline = time.monotonic() + self.authentication_timeout_seconds
                 if not is_authenticated_form_c(page):
                     report(
                         FillOnlyRunStatus.WAITING_FOR_LOGIN,
-                        "Complete the normal government login and CAPTCHA in Chromium",
+                        "Complete the normal government login and CAPTCHA in the existing Chromium window",
                     )
                 while not is_authenticated_form_c(page):
                     if time.monotonic() >= deadline:
@@ -233,30 +247,12 @@ class FillOnlyBrowser:
                 plan = self.executor.execute(page, case_id)
                 report(
                     FillOnlyRunStatus.REVIEW,
-                    "Form filled without submission. Review it in the Chromium window",
-                    len(plan.operations),
-                )
-                if wait_for_browser_close:
-                    while context.pages:
-                        try:
-                            context.pages[0].wait_for_timeout(500)
-                        except PlaywrightError:
-                            break
-                elif hold_for_review:
-                    try:
-                        input(
-                            "Form filled. Review it in Chromium. Press Enter to close without submitting. "
-                        )
-                    except EOFError:
-                        pass
-                report(
-                    FillOnlyRunStatus.CLOSED,
-                    "Chromium closed without an automated submission; fill-only can be run again",
+                    "Form filled without submission. Review it in the reusable Chromium window",
                     len(plan.operations),
                 )
                 return plan
-            finally:
-                context.close()
+            except PlaywrightError as error:
+                raise ValueError("The reusable portal window closed during fill-only") from error
 
 
 def main() -> None:

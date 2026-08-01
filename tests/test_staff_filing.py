@@ -48,7 +48,8 @@ def test_staff_case_offers_direct_fill_without_a_preflight_gate(tmp_path: Path):
 
     first_page = client.get(f"/staff/cases/{case_id}")
     assert first_page.status_code == 200
-    assert "Open portal and fill Form C" in first_page.text
+    assert "Fill Form C in portal window" in first_page.text
+    assert "one reusable Chromium window" in first_page.text
     assert "preflight" not in first_page.text.casefold()
     assert "Run mock filing worker" not in first_page.text
     assert "mock-government.local" not in first_page.text
@@ -97,7 +98,7 @@ def test_staff_fill_action_launches_the_coordinator_without_a_cli(
 class _SuccessfulBrowser:
     def run(self, case_id, *, hold_for_review, wait_for_browser_close, progress):
         assert hold_for_review is False
-        assert wait_for_browser_close is True
+        assert wait_for_browser_close is False
         progress(
             FillOnlyRunStatus.WAITING_FOR_LOGIN,
             "Complete login and CAPTCHA",
@@ -105,7 +106,6 @@ class _SuccessfulBrowser:
         )
         progress(FillOnlyRunStatus.FILLING, "Filling", None)
         progress(FillOnlyRunStatus.REVIEW, "Review", 3)
-        progress(FillOnlyRunStatus.CLOSED, "Closed safely", 3)
         return SimpleNamespace(operations=[1, 2, 3])
 
 
@@ -134,8 +134,9 @@ def test_coordinator_records_completion_and_safe_partial_fill_failure(
     coordinator.launch(case_id)
     assert coordinator.wait_until_idle()
     completed = store.load_fill_only_run(case_id)
-    assert completed.status == FillOnlyRunStatus.CLOSED
+    assert completed.status == FillOnlyRunStatus.REVIEW
     assert completed.operations_filled == 3
+    assert completed.finished_at is not None
     assert store.load_state(case_id).status == CaseStatus.READY_FOR_FILING
 
     coordinator.browser_factory = lambda _executor: _FailingBrowser()

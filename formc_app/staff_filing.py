@@ -17,7 +17,6 @@ ACTIVE_FILL_STATUSES = {
     FillOnlyRunStatus.STARTING,
     FillOnlyRunStatus.WAITING_FOR_LOGIN,
     FillOnlyRunStatus.FILLING,
-    FillOnlyRunStatus.REVIEW,
 }
 
 
@@ -47,7 +46,7 @@ class StaffFilingCoordinator:
         with self._lock:
             if self._active_case_id is not None:
                 raise ValueError(
-                    f"Fill-only is already open for {self._active_case_id}; close that Chromium window first"
+                    f"Fill-only is already running for {self._active_case_id}; wait for it to finish"
                 )
 
     def display_state(self, case_id: str) -> FillOnlyRunState:
@@ -70,7 +69,7 @@ class StaffFilingCoordinator:
         with self._lock:
             if self._active_case_id is not None:
                 raise ValueError(
-                    f"Fill-only is already open for {self._active_case_id}; close that Chromium window first"
+                    f"Fill-only is already running for {self._active_case_id}; wait for it to finish"
                 )
             self._active_case_id = case_id
             started_at = utc_now()
@@ -78,7 +77,7 @@ class StaffFilingCoordinator:
                 FillOnlyRunState(
                     case_id=case_id,
                     status=FillOnlyRunStatus.STARTING,
-                    message="Opening the dedicated government-portal Chromium window",
+                    message="Connecting to the reusable government-portal Chromium window",
                     started_at=started_at,
                     updated_at=started_at,
                 )
@@ -106,7 +105,12 @@ class StaffFilingCoordinator:
                     updated_at=now,
                     started_at=previous.started_at or now,
                     finished_at=now
-                    if status in {FillOnlyRunStatus.CLOSED, FillOnlyRunStatus.FAILED}
+                    if status
+                    in {
+                        FillOnlyRunStatus.REVIEW,
+                        FillOnlyRunStatus.CLOSED,
+                        FillOnlyRunStatus.FAILED,
+                    }
                     else None,
                     operations_filled=operations_filled
                     if operations_filled is not None
@@ -127,14 +131,14 @@ class StaffFilingCoordinator:
             plan = browser.run(
                 case_id,
                 hold_for_review=False,
-                wait_for_browser_close=True,
+                wait_for_browser_close=False,
                 progress=progress,
             )
             state = self.store.load_fill_only_run(case_id)
-            if state.status != FillOnlyRunStatus.CLOSED:
+            if state.status != FillOnlyRunStatus.REVIEW:
                 progress(
-                    FillOnlyRunStatus.CLOSED,
-                    "Chromium closed without an automated submission; fill-only can be run again",
+                    FillOnlyRunStatus.REVIEW,
+                    "Form filled without submission. Review it in the reusable Chromium window",
                     len(plan.operations),
                 )
         except Exception as error:
