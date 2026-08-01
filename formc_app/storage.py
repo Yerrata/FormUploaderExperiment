@@ -16,6 +16,7 @@ from formc_app.models import (
     CaseStatus,
     CaseSummary,
     EvidenceManifest,
+    FillOnlyRunState,
     FilingRequest,
     MockSubmission,
     utc_now,
@@ -221,6 +222,11 @@ class CaseStore:
             (self.sha256(content) + "\n").encode("ascii"),
         )
 
+    def clear_fill_plan(self, case_id: str) -> None:
+        case_dir = self._case_dir(case_id)
+        (case_dir / "fill-plan.json").unlink(missing_ok=True)
+        (case_dir / "fill-plan.sha256").unlink(missing_ok=True)
+
     def load_sealed_fill_plan_bytes(self, case_id: str) -> bytes:
         case_dir = self._case_dir(case_id)
         plan_path = case_dir / "fill-plan.json"
@@ -233,6 +239,16 @@ class CaseStore:
         if not secrets.compare_digest(self.sha256(content), expected_sha256):
             raise ValueError("The fill plan no longer matches its seal")
         return content
+
+    def save_fill_only_run(self, state: FillOnlyRunState) -> None:
+        path = self._case_dir(state.case_id) / "fill-only-run.json"
+        self._atomic_write(path, self._json_bytes(state))
+
+    def load_fill_only_run(self, case_id: str) -> FillOnlyRunState:
+        path = self._case_dir(case_id) / "fill-only-run.json"
+        if not path.exists():
+            return FillOnlyRunState(case_id=case_id)
+        return FillOnlyRunState.model_validate_json(path.read_text("utf-8"))
 
     def load_candidate(self, case_id: str) -> CandidateFormC | None:
         path = self._case_dir(case_id) / "candidate.json"

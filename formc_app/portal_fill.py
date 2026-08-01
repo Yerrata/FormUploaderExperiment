@@ -6,7 +6,9 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Locator, Page, sync_playwright
 
 from formc_app.fill_plan import (
@@ -18,7 +20,7 @@ from formc_app.fill_plan import (
     _canonical_bytes,
     compile_fill_plan,
 )
-from formc_app.models import CaseStatus
+from formc_app.models import CaseStatus, FillOnlyRunStatus
 from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue, catalogue_page_controls
 from formc_app.portal_mapping import LIVE_SUBMISSION_CONTROL_IDS
 from formc_app.portal_session import DEFAULT_PORTAL_URL, is_authenticated_form_c, validate_portal_url
@@ -282,12 +284,31 @@ class FillOnlyBrowser:
     def profile_dir(self) -> Path:
         return self.executor.data_root / "portal-browser-profile"
 
-    def run(self, case_id: str, *, hold_for_review: bool = True) -> PortalFillPlan:
+    def run(
+        self,
+        case_id: str,
+        *,
+        hold_for_review: bool = True,
+        wait_for_browser_close: bool = False,
+        progress: Callable[[FillOnlyRunStatus, str, int | None], None] | None = None,
+    ) -> PortalFillPlan:
+        def report(
+            status: FillOnlyRunStatus,
+            message: str,
+            operations_filled: int | None = None,
+        ) -> None:
+            if progress is not None:
+                progress(status, message, operations_filled)
+
         validate_portal_url(self.portal_url)
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault(
             "PLAYWRIGHT_BROWSERS_PATH",
             str(Path(".playwright-browsers").resolve()),
+        )
+        report(
+            FillOnlyRunStatus.STARTING,
+            "Opening the dedicated government-portal Chromium window",
         )
         with sync_playwright() as playwright:
             context = playwright.chromium.launch_persistent_context(
@@ -299,20 +320,45 @@ class FillOnlyBrowser:
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto(self.portal_url, wait_until="domcontentloaded")
                 deadline = time.monotonic() + self.authentication_timeout_seconds
+                if not is_authenticated_form_c(page):
+                    report(
+                        FillOnlyRunStatus.WAITING_FOR_LOGIN,
+                        "Complete the normal government login and CAPTCHA in Chromium",
+                    )
                 while not is_authenticated_form_c(page):
                     if time.monotonic() >= deadline:
                         raise ValueError(
                             "Authenticated Form C controls were not found; complete normal login and CAPTCHA"
                         )
                     page.wait_for_timeout(500)
+                report(
+                    FillOnlyRunStatus.FILLING,
+                    "Authenticated Form C found; verifying and filling the sealed plan",
+                )
                 plan = self.executor.execute(page, case_id)
-                if hold_for_review:
+                report(
+                    FillOnlyRunStatus.REVIEW,
+                    "Form filled without submission. Review it in the Chromium window",
+                    len(plan.operations),
+                )
+                if wait_for_browser_close:
+                    while context.pages:
+                        try:
+                            context.pages[0].wait_for_timeout(500)
+                        except PlaywrightError:
+                            break
+                elif hold_for_review:
                     try:
                         input(
                             "Form filled. Review it in Chromium. Press Enter to close without submitting. "
                         )
                     except EOFError:
                         pass
+                report(
+                    FillOnlyRunStatus.CLOSED,
+                    "Chromium closed without an automated submission; fill-only can be run again",
+                    len(plan.operations),
+                )
                 return plan
             finally:
                 context.close()

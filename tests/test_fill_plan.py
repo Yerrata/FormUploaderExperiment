@@ -4,6 +4,8 @@ import json
 from datetime import date, time
 from pathlib import Path
 
+import pytest
+
 from formc_app.domain import CONDITIONALLY_REQUIRED_FIELD_NAMES, REQUIRED_FORM_C_FIELD_NAMES
 from formc_app.dummy_extraction import extract_dummy
 from formc_app.fill_plan import (
@@ -21,7 +23,7 @@ from formc_app.fill_plan import (
 from formc_app.models import CandidateField, CandidateFormC, CaseStatus, FilingRequest, utc_now
 from formc_app.portal_catalogue import PortalControl, PortalControlCatalogue, PortalOption
 from formc_app.portal_mapping import LIVE_SUBMISSION_CONTROL_IDS
-from formc_app.property_config import YerattaPropertyConfig
+from formc_app.property_config import PropertyConfigError, YerattaPropertyConfig
 from formc_app.storage import CaseStore
 
 
@@ -269,6 +271,25 @@ def test_preflight_builds_a_deterministic_ready_plan_without_a_browser(tmp_path:
     )
     assert persisted == first.model_dump(mode="json")
     assert (tmp_path / "cases" / case_id / "fill-plan.sha256").is_file()
+
+
+def test_failed_repreflight_invalidates_an_older_ready_plan(tmp_path: Path):
+    store = CaseStore(tmp_path)
+    case_id = _ready_case(store)
+    _write_preflight_inputs(tmp_path, _catalogue())
+    assert preflight_case(
+        store=store,
+        data_root=tmp_path,
+        case_id=case_id,
+    ).status == FillPlanStatus.READY
+
+    (tmp_path / "property.json").unlink()
+    with pytest.raises(PropertyConfigError, match="property configuration"):
+        preflight_case(store=store, data_root=tmp_path, case_id=case_id)
+
+    case_dir = tmp_path / "cases" / case_id
+    assert not (case_dir / "fill-plan.json").exists()
+    assert not (case_dir / "fill-plan.sha256").exists()
 
 
 def test_preflight_keeps_unsupported_destination_and_conditional_branches_blocked(

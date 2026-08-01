@@ -1,8 +1,6 @@
 # Yeratta Form C filing
 
-Stage 1 is a local-first vertical slice of the agreed Form C workflow. It uses deterministic passport and visa data so the guest experience, JSON hand-off, Filing Worker, mock government form and evidence path can be validated before real document extraction is introduced.
-
-It does not connect to or submit anything to the Indian government portal.
+Stage 1 is a local-first vertical slice of the agreed Form C workflow. It uses deterministic passport and visa data so the guest experience and JSON hand-off can be validated before real document extraction is introduced. The current Stage 2 MVP can open and fill the real government Form C from the staff case screen, but it cannot submit the form.
 
 ## What works
 
@@ -13,9 +11,9 @@ It does not connect to or submit anything to the Indian government portal.
 5. The wizard asks only missing guest-sourced Form C questions, one at a time. It never asks for hotel arrival time, room, the locked property address or the unproven Form B/Filer reference.
 6. Confirmation writes one validated `candidate.json` and one immutable `filing-request.json`.
 7. The filesystem status moves the case into the Filing Queue.
-8. A Python Playwright worker fills the separate mock Form C website.
-9. The worker captures and hashes a full-page pre-submit screenshot before clicking submit.
-10. A mock acknowledgement and receipt screenshot complete the evidence bundle.
+8. Staff runs the deterministic preflight from the case screen; unsupported or ambiguous cases stay blocked.
+9. A `READY` plan can open the official Form C in a separate Chromium window and fill it from the sealed local data.
+10. Staff reviews the live form. The automation contains no government submission action.
 
 There is no database, cloud backend, message broker, automated WhatsApp integration or real Optical Character Recognition (OCR).
 
@@ -37,7 +35,15 @@ Start the application:
 
 Open `http://127.0.0.1:8000/staff` on the Filing Worker. A phone on the same trusted Yeratta Wi-Fi can open `http://<filing-worker-ip>:8000/staff`.
 
-The staff case screen starts the Filing Worker as a background task. A separately running watcher is also available:
+The staff case screen is the primary MVP workflow. Once a guest has completed the Filing Request:
+
+1. Open the case from the staff dashboard.
+2. Choose **Run safe preflight**.
+3. If the plan is `READY`, choose **Open portal and fill Form C**.
+4. Complete the normal government login and CAPTCHA in the dedicated Chromium window when asked.
+5. Review the filled live form and submit it manually only when it is correct. The app neither clicks Submit nor captures the acknowledgement yet.
+
+The old mock worker remains available only for Stage 1 development and regression testing. Do not run its watcher while testing the live staff workflow:
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers .venv/bin/formc-worker \
@@ -134,11 +140,11 @@ Build the deterministic Stage 2 preflight for one sealed Filing Request with:
 
 This is an offline operation. It does not open a browser, fill a live control or submit anything. It atomically writes `data/cases/<case-id>/fill-plan.json` and its SHA-256 seal, verifies that the Candidate and guest photograph still match the sealed Filing Request, validates every prepared text, choice and file operation against the redacted control catalogue and records all remaining blockers. Property address, state, district and PIN are planned from the locked configuration. A normal India-destination case becomes `READY`; unsupported or ambiguous branches remain `BLOCKED`.
 
-Fill one `READY` plan in the authenticated government portal with:
+The staff case screen runs this preflight and fill-only sequence without case-specific terminal commands. The underlying diagnostic command remains available for developers:
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   .venv/bin/formc-fill-only YRT-YYYYMMDD-XXXX --data-dir data
 ```
 
-The command opens the official portal in the dedicated Chromium profile and waits for normal staff login and CAPTCHA when necessary. It verifies the authenticated page, live controls, plan seal, Candidate, Filing Request, photograph, property configuration and catalogue before applying the ordered operations. Dynamically loaded district/city choices must match exactly. The filled page remains open for staff review until Enter is pressed. The executor contains no submit action and refuses both known submission controls.
+The staff action opens the official portal in the dedicated Chromium profile and waits for normal staff login and CAPTCHA when necessary. It verifies the authenticated page, live controls, plan seal, Candidate, Filing Request, photograph, property configuration and catalogue before applying the ordered operations. Dynamically loaded district/city choices must match exactly. The filled page remains open for staff review until Chromium is closed. The executor contains no submit action and refuses both known submission controls.
